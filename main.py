@@ -6,7 +6,7 @@ import sys, random, time, threading, os, ctypes
 # 这里我们提供必要的引用。基本控件位于pyqt5.qtwidgets模块中。
 from PyQt5.QtWidgets import (QWidget, QToolTip, QPushButton, QApplication, QDesktopWidget, QMessageBox,
                              QHBoxLayout, QVBoxLayout, QMainWindow, QAction, qApp,  QTextEdit, QLCDNumber, QSlider,
-                             QInputDialog, QLineEdit, QGridLayout, QFileDialog, QLabel, QRadioButton,
+                             QInputDialog, QLineEdit, QGridLayout, QFileDialog, QLabel, QRadioButton, QMenu,
                              QComboBox, QLineEdit, QListWidget, QCheckBox, QListWidgetItem, QGroupBox)
 from PyQt5.QtGui import QFont, QIcon, QPainter, QColor, QPen, QBrush, QPixmap
 from PyQt5.QtCore import QCoreApplication, Qt, QRect, QSize, pyqtSignal, QThread, QPoint, QMetaObject, QTimer
@@ -23,6 +23,8 @@ matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号不显示的问
 
 Ser_Open_Flag = False  #串口打开标志
 oneself = False  # 标志为模块自己运行
+PaintWithAxis_Start_Flag = False  #绘图打开标志
+PaintWithAxis_UpdateData = 1
 
 #复选框
 class ComboCheckBox(QComboBox):
@@ -252,148 +254,6 @@ class Serial_Tool_Draw(QWidget):
         qp.setBrush(brush)
         qp.drawRect(250, 195, 90, 60)
 
-class Serial_Tool_PaintWithAxisThread(QThread):
-    signal = pyqtSignal(int) #信号
-
-    def __init__(self,parent=None):
-        super(Serial_Tool_PaintWithAxisThread,self).__init__(parent)
-
-    def start_timer(self):
-       self.start() #启动线程
-
-    def run(self):
-        while True:
-            Value = random.randint(1, 100) #可换成需要的真实数据
-            self.signal.emit(Value) #发送信号
-            time.sleep(1)
-
-class Serial_Tool_PaintWithAxis(FigureCanvas):
-    """
-    创建画板类
-    """
-    def __init__(self, width=3.2, height=2.7):
-        self.UseFigure = Figure(figsize=(width, height), dpi=70)
-        super(Serial_Tool_PaintWithAxis, self).__init__(self.UseFigure)
-        self.Axis = self.UseFigure.add_subplot(111)  # 111表示1行1列，第一张曲线图
-        self.Data_Num = 100     # X轴最大值
-        self.YData_Max = 120    # Y轴最大值
-        self.Updata_Count = 10  # 累计更新Updata_Count个数据后更新绘图，必须小于self.Data_Num
-
-    def Add_Line(self, x_data, y_data, y2_data=None):
-        self.Line = Line2D(x_data, y_data)  # 绘制2D折线图
-
-        # ------------------调整折线图基本样式---------------------#
-
-        # self.line.set_ls('--')  # 设置连线
-        # self.line.set_marker('*') # 设置每个点
-        # self.line.set_color('red')  # 设置线条颜色
-
-        self.Axis.grid(True)  # 添加网格
-        self.Axis.set_title('动态曲线')  # 设置标题
-
-        # 设置xy轴最大最小值,找到x_data, y_data最大最小值
-        self.Axis.set_xlim(np.min(x_data), np.max(x_data))
-        self.Axis.set_ylim(np.min(y_data), np.max(y_data) + 2)  # y轴稍微多一点，会好看一点
-
-        self.Axis.set_xlabel('x坐标')  # 设置坐标名称
-        self.Axis.set_ylabel('y坐标')
-
-        # 在曲线下方填充颜色
-        # self.ax.fill_between(x_data, y_data, color='g', alpha=0.1)
-
-        # self.ax.legend([self.line], ['sinx'])  # 添加图例
-
-        # ------------------------------------------------------#
-        self.Axis.add_line(self.Line)
-
-
-        # 绘制第二条曲线
-        # self.Line2 = Line2D(x_data, y2_data)
-        # self.Axis.add_line(self.Line2)
-        # self.Line2.set_color('red')  # 设置线条颜色
-        # self.Axis.legend([self.Line, self.Line2], ['sinx', 'cosx'])  # 添加图例
-        #
-        self.Axis2 = self.Axis.twinx()
-        self.Axis2.set_ylim(np.min(y_data), np.max(y_data) + 2)
-        self.Axis2.set_ylabel('y2坐标')
-
-class Serial_Tool_PaintWithAxisUi(QMainWindow):
-    def __init__(self):
-        super(Serial_Tool_PaintWithAxisUi, self).__init__()
-        self.setWindowTitle('绘制动态曲线')
-        self.resize(1000, 800)
-
-        # 创建一个groupbox, 用来画动态曲线
-        self.groupBox = QGroupBox(self)
-        self.groupBox.setGeometry(QRect(100, 200, 800, 300))
-
-        self.Load_DynamicLine()  # 加载动态曲线
-
-        if oneself == True:  # 如果是模块自己运行则启动多线程发送随机数
-            # 创建定时器，使曲线图动态更新
-            self.UseTimer = QTimer()
-            self.UseTimer.start(10)
-            self.TimeStamp = time.time()
-            self.UseTimer.timeout.connect(self.UpdateData_OneSelf)
-        else:
-            self.TimeStamp = time.time()
-            self.PaintWithAxisThread = Serial_Tool_PaintWithAxisThread()
-            self.PaintWithAxisThread.signal.connect(self.UpdateData_UseSignal)
-            self.PaintWithAxisThread.start()
-
-    def Load_DynamicLine(self):
-        self.LineFigure = Serial_Tool_PaintWithAxis()
-
-        self.LineFigureLayout = QGridLayout(self.groupBox)
-        self.LineFigureLayout.addWidget(self.LineFigure)
-
-        if oneself == True:  # 如果是模块自己运行则启动多线程发送随机数
-            # 准备数据，绘制曲线
-            x_data = np.arange(-4, 4, 0.02)
-            y_data = np.sin(x_data)
-            # y2_data = np.cos(x_data)
-            # self.LineFigure.Add_Line(x_data, y_data, y2_data)
-        else:
-            x_data = np.arange(0, self.LineFigure.Data_Num, 1)
-            y_data = [self.LineFigure.YData_Max for i in range(self.LineFigure.Data_Num)]
-            for i in range(1, self.LineFigure.Data_Num):
-                y_data[i] = random.randint(1, self.LineFigure.YData_Max)
-
-        self.LineFigure.Update_Y_Data = [0]*self.LineFigure.Data_Num
-        if(self.LineFigure.Updata_Count > self.LineFigure.Data_Num):
-            self.LineFigure.Updata_Count = self.LineFigure.Data_Num
-
-        self.LineFigure.Add_Line(x_data, y_data)
-
-    def UpdateData_OneSelf(self):
-        dt = time.time() - self.TimeStamp
-        x_data = np.arange(-4, 4, 0.02)
-        z_data = np.sin(x_data + dt)  # 准备动态数据
-
-        h_data = np.cos(x_data + dt)
-
-        self.LineFigure.Line.set_ydata(z_data)  # 更新数据
-        # self.LineFigure.Line2.set_ydata(h_data)
-        self.LineFigure.draw()  # 重新画图
-
-    def UpdateData_UseSignal(self, New_data):
-        x_data = int(time.time() - self.TimeStamp)
-        if (x_data%self.LineFigure.Updata_Count):
-            self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - self.LineFigure.Updata_Count + x_data - 1] = New_data
-            # print("no attend", x_data, New_data)
-        else:
-            self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - 1] = New_data
-            if(x_data != 0):
-                self.TimeStamp = time.time()
-                # print("x:", x_data, "TimeStamp:", int(self.TimeStamp),"New_data:", New_data)
-                # print("y:", self.LineFigure.Update_Y_Data)
-                self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)  # 更新数据
-                self.LineFigure.draw()  # 重新画图
-
-                #数据往前移
-                for i in range(0, self.LineFigure.Data_Num - self.LineFigure.Updata_Count):
-                    self.LineFigure.Update_Y_Data[i] = self.LineFigure.Update_Y_Data[i + self.LineFigure.Updata_Count]
-
 class Serial_Tool_PaintThread(QThread):
     signal = pyqtSignal() #信号
 
@@ -527,6 +387,209 @@ class Serial_Tool_Paint(QWidget):
         self.Begin_X = self.End_X #改变结束后的坐标
         self.Begin_Y = self.End_Y
 
+class Serial_Tool_Log():
+    def __init__(self, parent=None):
+        self.LogSwitch = False
+        self.LogType = 1 #1为print打印
+
+    def Log_Output(self, *objects, sep=' ', end='\n', file=sys.stdout, flush=False):
+        if self.LogSwitch:
+            if(self.LogType == 1):
+                print(*objects, sep=' ', end='\n', file=sys.stdout, flush=False)
+
+    def Change_Switch(self, Sw):
+        self.LogSwitch = Sw
+
+    def Change_Type(self, Tp):
+        self.LogType = Tp
+
+class Serial_Tool_PaintWithAxisThread(QThread):
+    signal = pyqtSignal(int) #信号
+
+    def __init__(self,parent=None):
+        super(Serial_Tool_PaintWithAxisThread,self).__init__(parent)
+
+    def start_timer(self):
+       self.start() #启动线程
+
+    def run(self):
+        while PaintWithAxis_Start_Flag:
+            if(Ser_Open_Flag):
+                #Value = 1#random.randint(1, 100) #可换成需要的真实数据
+                self.signal.emit(PaintWithAxis_UpdateData) #发送信号
+            else:
+                Value = random.randint(1, 100)
+                self.signal.emit(Value)  # 发送信号
+            time.sleep(1)
+
+class Serial_Tool_PaintWithAxis(FigureCanvas):
+    """
+    创建画板类
+    """
+    def __init__(self, width=3.2, height=2.7):
+        self.UseFigure = Figure(figsize=(width, height), dpi=70)
+        super(Serial_Tool_PaintWithAxis, self).__init__(self.UseFigure)
+        self.Axis = self.UseFigure.add_subplot(111)  # 111表示1行1列，第一张曲线图
+        self.Data_Num = 100     # X轴最大值,要大于1
+        self.YData_Max = 120    # Y轴最大值
+        self.Updata_Count = 0  # 累计更新Updata_Count个数据后更新绘图，必须小于self.Data_Num
+
+    def Add_Line(self, x_data, y_data, y2_data=None):
+        self.Line = Line2D(x_data, y_data)  # 绘制2D折线图
+
+        # ------------------调整折线图基本样式---------------------#
+
+        # self.line.set_ls('--')  # 设置连线
+        # self.line.set_marker('*') # 设置每个点
+        # self.line.set_color('red')  # 设置线条颜色
+
+        self.Axis.grid(True)  # 添加网格
+        self.Axis.set_title('动态曲线')  # 设置标题
+
+        # 设置xy轴最大最小值,找到x_data, y_data最大最小值
+        self.Axis.set_xlim(np.min(x_data), np.max(x_data))
+        self.Axis.set_ylim(np.min(y_data), np.max(y_data) + 2)  # y轴稍微多一点，会好看一点
+
+        self.Axis.set_xlabel('x坐标')  # 设置坐标名称
+        self.Axis.set_ylabel('y坐标')
+
+        # 在曲线下方填充颜色
+        # self.ax.fill_between(x_data, y_data, color='g', alpha=0.1)
+
+        # self.ax.legend([self.line], ['sinx'])  # 添加图例
+
+        # ------------------------------------------------------#
+        self.Axis.add_line(self.Line)
+
+
+        # 绘制第二条曲线
+        # self.Line2 = Line2D(x_data, y2_data)
+        # self.Axis.add_line(self.Line2)
+        # self.Line2.set_color('red')  # 设置线条颜色
+        # self.Axis.legend([self.Line, self.Line2], ['sinx', 'cosx'])  # 添加图例
+        #
+        self.Axis2 = self.Axis.twinx()
+        self.Axis2.set_ylim(np.min(y_data), np.max(y_data) + 2)
+        self.Axis2.set_ylabel('y2坐标')
+
+class Serial_Tool_PaintWithAxisUi(QMainWindow):
+    def __init__(self, Log):
+        super(Serial_Tool_PaintWithAxisUi, self).__init__()
+        self.UseLog = Log
+
+        self.setWindowTitle('绘制动态曲线')
+        self.resize(1000, 800)
+
+        # 创建一个groupbox, 用来画动态曲线
+        self.groupBox = QGroupBox(self)
+        self.groupBox.setGeometry(QRect(100, 200, 800, 300))
+
+        self.LineFigureLayout = QGridLayout(self.groupBox)
+
+        self.StartButton = QPushButton('开始', self)
+        self.StopButton = QPushButton("停止", self)
+        self.StartButton.clicked.connect(self.PushButtonClickedHandle)
+        self.StopButton.clicked.connect(self.PushButtonClickedHandle)
+        self.LineFigureLayout.addWidget(self.StartButton, 1, 0)
+        self.LineFigureLayout.addWidget(self.StopButton, 1, 1)
+
+        self.Load_DynamicLine()  # 加载动态曲线
+
+        self.setLayout(self.LineFigureLayout)
+
+        if oneself == True:  # 如果是模块自己运行则启动多线程发送随机数
+            # 创建定时器，使曲线图动态更新
+            self.UseTimer = QTimer()
+            self.UseTimer.start(10)
+            self.TimeStamp = time.time()
+            self.UseTimer.timeout.connect(self.UpdateData_OneSelf)
+        else:
+            global PaintWithAxis_Start_Flag
+            PaintWithAxis_Start_Flag = True
+            self.TimeStamp = time.time()
+            self.PaintWithAxisThread = Serial_Tool_PaintWithAxisThread()
+            self.PaintWithAxisThread.signal.connect(self.UpdateData_UseSignal)
+            self.PaintWithAxisThread.start()
+
+    def Load_DynamicLine(self):
+        self.LineFigure = Serial_Tool_PaintWithAxis()
+
+        self.LineFigureLayout.addWidget(self.LineFigure, 0, 0, 1, 2)
+
+        if oneself == True:  # 如果是模块自己运行则启动多线程发送随机数
+            # 准备数据，绘制曲线
+            x_data = np.arange(-4, 4, 0.02)
+            y_data = np.sin(x_data)
+            # y2_data = np.cos(x_data)
+            # self.LineFigure.Add_Line(x_data, y_data, y2_data)
+        else:
+            x_data = np.arange(0, self.LineFigure.Data_Num, 1)
+            y_data = [self.LineFigure.YData_Max for i in range(self.LineFigure.Data_Num)]
+            for i in range(1, self.LineFigure.Data_Num):
+                y_data[i] = random.randint(1, self.LineFigure.YData_Max)
+
+        self.LineFigure.Update_Y_Data = [0]*self.LineFigure.Data_Num
+        if(self.LineFigure.Updata_Count > self.LineFigure.Data_Num):
+            self.LineFigure.Updata_Count = self.LineFigure.Data_Num
+        elif (self.LineFigure.Updata_Count < 1):
+            self.LineFigure.Updata_Count = 1
+
+        self.LineFigure.Add_Line(x_data, y_data)
+
+    def UpdateData_OneSelf(self):
+        dt = time.time() - self.TimeStamp
+        x_data = np.arange(-4, 4, 0.02)
+        z_data = np.sin(x_data + dt)  # 准备动态数据
+
+        h_data = np.cos(x_data + dt)
+
+        self.LineFigure.Line.set_ydata(z_data)  # 更新数据
+        # self.LineFigure.Line2.set_ydata(h_data)
+        self.LineFigure.draw()  # 重新画图
+
+    def UpdateData_UseSignal(self, New_data):
+        x_data = int(time.time() - self.TimeStamp)
+        if (x_data%self.LineFigure.Updata_Count):
+            self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - self.LineFigure.Updata_Count + x_data - 1] = New_data
+            # print("no attend", x_data, New_data)
+        else:
+            self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - 1] = New_data
+            if(x_data != 0):
+                self.TimeStamp = time.time()
+                self.UseLog.Log_Output("x:", x_data, "TimeStamp:", int(self.TimeStamp),"New_data:", New_data)
+                self.UseLog.Log_Output("y:", self.LineFigure.Update_Y_Data)
+                self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)  # 更新数据
+                self.LineFigure.draw()  # 重新画图
+
+                #数据往前移
+                for i in range(0, self.LineFigure.Data_Num - self.LineFigure.Updata_Count):
+                    self.LineFigure.Update_Y_Data[i] = self.LineFigure.Update_Y_Data[i + self.LineFigure.Updata_Count]
+
+    def PushButtonClickedHandle(self):
+        global PaintWithAxis_Start_Flag
+        sender = self.sender()
+
+        if sender.text() == "开始":
+            if not PaintWithAxis_Start_Flag:
+                PaintWithAxis_Start_Flag = True
+                self.TimeStamp = time.time()
+                self.PaintWithAxisThread = Serial_Tool_PaintWithAxisThread()
+                self.PaintWithAxisThread.signal.connect(self.UpdateData_UseSignal)
+                self.PaintWithAxisThread.start()
+        if sender.text() == "停止":
+            PaintWithAxis_Start_Flag = False
+
+    def closeEvent(self, event):
+        reply = QMessageBox.question(self, 'Message',
+                                     "Are you sure to quit?", QMessageBox.Yes |
+                                     QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            global PaintWithAxis_Start_Flag
+            PaintWithAxis_Start_Flag = False
+            event.accept()
+        else:
+            event.ignore()
+
 class Serial_Tool_SerThread(QThread, threading.Thread):
     Signal = pyqtSignal(str)
 
@@ -567,12 +630,15 @@ class Serial_Tool_Ser(Serial):
     def SerialReadData(self, Signal):
         # 循环接收数据，此为死循环，可用线程实现
         if(self.UseSer.isOpen):
-            self.Strglo = time.strftime("[%Y-%m-%d %H:%M:%S]", time.localtime())
+            self.Strglo = time.strftime("[%Y-%m-%d %H:%M:%S (R)]", time.localtime())
             Signal.emit(self.Strglo)
             if self.UseSer.in_waiting:
-                self.Strglo +=  self.UseSer.read( self.UseSer.in_waiting).decode("gbk")
+                ReadString =  self.UseSer.read( self.UseSer.in_waiting).decode("gbk")
+                self.Strglo += ReadString
                 print("SerialReadData:", len(self.Strglo))
                 Signal.emit(self.Strglo)
+                global PaintWithAxis_UpdateData
+                PaintWithAxis_UpdateData = int(ReadString)
 
     # 关闭串口
     def SerialColsePort(self):
@@ -589,9 +655,9 @@ class Serial_Tool_Ser(Serial):
             self.Send_Count = self.UseSer.write(text.encode("gbk"))  # 写数据
 
 class Serial_Tool_Widget(QWidget):
-    def __init__(self):
+    def __init__(self, Log):
         super().__init__()
-
+        self.UseLog = Log
         self.initUI()
 
     def initUI(self):
@@ -608,8 +674,8 @@ class Serial_Tool_Widget(QWidget):
         DatacomboBox = QLabel('数据位')
         StopcomboBox = QLabel('停止位')
         ParitycomboBox = QLabel('奇偶校验')
-        SendtextEdit = QLabel('发送数据框')
-        RecvtextEdit = QLabel('接收数据框')
+        SendtextEdit = QLabel('数据输入框')
+        RecvtextEdit = QLabel('数据显示框')
 
         self.SendtextEdit = QLineEdit()#QTextEdit()
         self.RecvtextEdit = QTextEdit()
@@ -621,13 +687,14 @@ class Serial_Tool_Widget(QWidget):
         self.Data_Bits = ['5', '6', '7', '8']
         self.Stop_Bits = ['1', '1.5', '2']
         self.Parity_Bits = ['None', 'Odd', 'Even', 'Mark', 'Space']
-        # print("list",port_list)
+        self.UseLog.Log_Output("list", self.port_list)
 
         self.OpenButton = QPushButton('打开串口', self)
         self.CloseButton = QPushButton("关闭串口", self)
         self.SendButton = QPushButton("发送数据", self)
         self.ClearSendButton = QPushButton("清空发送框", self)
         self.ClearRecvButton = QPushButton("清空接收框", self)
+        self.refreshPortButton = QPushButton("刷新端口", self)
         self.DexButton = QRadioButton('Dex', self)
         self.HexButton = QRadioButton('Hex', self)
 
@@ -636,6 +703,7 @@ class Serial_Tool_Widget(QWidget):
         self.SendButton.clicked.connect(self.PushButtonClickedHandle)
         self.ClearSendButton.clicked.connect(self.PushButtonClickedHandle)
         self.ClearRecvButton.clicked.connect(self.PushButtonClickedHandle)
+        self.refreshPortButton.clicked.connect(self.PushButtonClickedHandle)
 
         self.DexButton.toggled.connect(self.RadioButtonClickedHandle)
         self.HexButton.toggled.connect(self.RadioButtonClickedHandle)
@@ -643,7 +711,7 @@ class Serial_Tool_Widget(QWidget):
         self.Port_comboBox = QComboBox(self)
         for i in range(0, len(self.port_list)):
             self.port_list[i] = str(self.port_list[i])
-            # print(type(self.port_list[i]))
+            self.UseLog.Log_Output(type(self.port_list[i]))
         self.Port_comboBox.addItems(self.port_list)
 
         self.Baud_comboBox = QComboBox(self)
@@ -696,6 +764,7 @@ class Serial_Tool_Widget(QWidget):
         grid.addWidget(self.SendButton, X_Index + 2*X_ButtonStep, Y_Index + Y_ButtonStep)
         grid.addWidget(self.ClearSendButton, X_Index + 3 * X_ButtonStep, Y_Index + Y_ButtonStep)
         grid.addWidget(self.ClearRecvButton, X_Index + 4*X_ButtonStep, Y_Index + Y_ButtonStep)
+        grid.addWidget(self.refreshPortButton, X_Index + 5*X_ButtonStep, Y_Index + Y_ButtonStep)
 
         self.setLayout(grid)
         # self.setGeometry(300, 300, 800, 300)
@@ -713,7 +782,7 @@ class Serial_Tool_Widget(QWidget):
                 self.ByteSize = int(self.Data_comboBox.currentText())
             if len(self.Stop_comboBox.currentText()):
                 self.StopBits = float(self.Stop_comboBox.currentText())
-            # print(len(self.OpenPort), self.BaudRate, self.ByteSize, self.StopBits)
+            self.UseLog.Log_Output(len(self.OpenPort), self.BaudRate, self.ByteSize, self.StopBits)
             if (len(self.OpenPort) != 0 or self.BaudRate != 0):
                 self.Serial = Serial_Tool_Ser(self.OpenPort, self.BaudRate, self.ByteSize, self.StopBits, self.Parity, None)
                 if (self.Serial.Open_Ret == True):  # 判断串口是否成功打开
@@ -721,30 +790,32 @@ class Serial_Tool_Widget(QWidget):
                         self.OpenButton.setEnabled(False)
                         self.Serial.SerThread.Signal.connect(self.ShowRecvData)
                         self.Serial.SerThread.start()
-                        print(sender.text() + ' ' + self.OpenPort + ' Successful')
+                        self.UseLog.Log_Output(sender.text() + ' ' + self.OpenPort + ' Successful')
                     except Exception as e:
-                        print("打开串口异常:", e)
+                        self.UseLog.Log_Output("打开串口异常:", e)
                 else:
-                    print(sender.text() + ' Fail')
+                    self.UseLog.Log_Output(sender.text() + ' Fail')
             else:
-                print(' Please Select Port')
+                self.UseLog.Log_Output(' Please Select Port')
 
         if sender.text() == "关闭串口":
             self.OpenButton.setEnabled(True)
             if (self.Serial.Open_Ret == True):
                 self.Serial.SerialColsePort()
-                print(sender.text() + ' Successful')
+                self.UseLog.Log_Output(sender.text() + ' Successful')
 
         if sender.text() == "发送数据":
             if (self.Serial.Open_Ret == True):
                 if(self.Format):
                     self.Serial.SerialWritePort(self.SendtextEdit.text())
-                    print("写入字节数：", self.Serial.Send_Count)
+                    self.UseLog.Log_Output("Dex 写入字节数：", self.Serial.Send_Count)
+                    self.RecvtextEdit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + self.SendtextEdit.text())
                 else:
-                    self.Serial.SerialWritePort(self.SendtextEdit.text())
-                    print("写入字节数：", self.Serial.Send_Count)
+                    self.Serial.SerialWritePort(self.SendtextEdit.text().encode('utf-8').hex())
+                    self.UseLog.Log_Output("Hex 写入字节数：", self.Serial.Send_Count)
+                    self.RecvtextEdit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + self.SendtextEdit.text().encode('utf-8').hex())
             else:
-                print(sender.text() + ' ERROR')
+                self.UseLog.Log_Output(sender.text() + ' ERROR')
 
         if sender.text() == "清空发送框":
             self.SendtextEdit.clear()
@@ -752,39 +823,47 @@ class Serial_Tool_Widget(QWidget):
         if sender.text() == "清空接收框":
             self.RecvtextEdit.clear()
 
+        if sender.text() == "刷新端口":
+            self.port_list = list(serial.tools.list_ports.comports())
+            for i in range(0, len(self.port_list)):
+                self.port_list[i] = str(self.port_list[i])
+                self.UseLog.Log_Output(type(self.port_list[i]))
+            self.Port_comboBox.clear()
+            self.Port_comboBox.addItems(self.port_list)
+
     def RadioButtonClickedHandle(self):
         sender = self.sender()
         if sender.text() == "Dex":
             self.Format = True
-            # print("Dex")
+            self.UseLog.Log_Output("Dex")
 
         if sender.text() == "Hex":
             self.Format = False
-            # print("Hex")
+            self.UseLog.Log_Output("Hex")
 
     # 选定串口
     def GetOpenPort(self, port_str):
         if len(port_str):
             Front_index = port_str.find('(')
             Rear_index = port_str.find(')')
-            # print(len(port_str), Front_index, Rear_index)
+            self.UseLog.Log_Output(len(port_str), Front_index, Rear_index)
             return port_str[Front_index+1:Rear_index]
-        # print("NUll")
+        self.UseLog.Log_Output("NUll")
         return ''
 
     def ShowRecvData(self, RecvData):
-        print("ShowRecvData:", RecvData,"len:", len(RecvData))
+        self.UseLog.Log_Output("ShowRecvData:", RecvData,"len:", len(RecvData))
         if(len(RecvData)):
                 self.RecvtextEdit.append(RecvData)
 
 class Serial_Tool_MainUI(QMainWindow):
     def __init__(self):
         super().__init__()
-
+        self.UseLog = Serial_Tool_Log()
         self.initUI()
 
     def initUI(self):
-        self.UseWidget = Serial_Tool_Widget()
+        self.UseWidget = Serial_Tool_Widget(self.UseLog)
         self.setCentralWidget(self.UseWidget)
         # self.MyDraw = Serial_Tool_Paint()#Serial_Tool_Draw()
         #创建状态栏的小窗口
@@ -798,7 +877,6 @@ class Serial_Tool_MainUI(QMainWindow):
         self.Save_file_menu.setShortcut('Ctrl+' + 'S')
         self.Save_file_menu.setStatusTip('Save File')
         self.Save_file_menu.triggered.connect(self.SaveDialog)
-
         # 创建一个菜单栏
         filemenubar = self.menuBar()
         # 添加菜单
@@ -807,15 +885,38 @@ class Serial_Tool_MainUI(QMainWindow):
         FileMenu.addAction(self.Open_file_menu)
         FileMenu.addAction(self.Save_file_menu)
 
-        self.Start_Draw_menu = QAction(QIcon('Save.jpeg'), "开启", self)
+        self.Start_Draw_menu = QAction(QIcon('Save.jpeg'), "启动绘图", self)
         self.Start_Draw_menu.setShortcut('Ctrl+' + 'T')
         self.Start_Draw_menu.setStatusTip('Start Draw')
         self.Start_Draw_menu.triggered.connect(self.Start_Draw)
-
         # 创建一个菜单栏
         Drawmenubar = self.menuBar()
         DrawMenu = Drawmenubar.addMenu('&画图')
         DrawMenu.addAction(self.Start_Draw_menu)
+
+        #显示勾选
+        self.Log_Type1 = QAction("日志输出类型1", self, checkable = True)
+        self.Log_Type1.setStatusTip('Use Print Output')
+        self.Log_Type1.setChecked(True)
+        self.Log_Type1.triggered.connect(self.Debug_Option)
+        Log_Type_menu = QMenu('日志输出类型', self)
+        Log_Type_menu.addAction(self.Log_Type1)
+        self.Log_SwON = QAction("打开日志输出", self, checkable = True)
+        self.Log_SwON.setStatusTip('Debug Switch ON')
+        self.Log_SwON.setChecked(False)
+        self.Log_SwON.triggered.connect(self.Debug_Option)
+        self.Log_SwOFF = QAction("关闭日志输出", self, checkable = True)
+        self.Log_SwOFF.setStatusTip('Debug Switch OFF')
+        self.Log_SwOFF.setChecked(True)
+        self.Log_SwOFF.triggered.connect(self.Debug_Option)
+        Log_Sw_menu = QMenu('日志开关', self)
+        Log_Sw_menu.addAction(self.Log_SwON)
+        Log_Sw_menu.addAction(self.Log_SwOFF)
+        # 创建一个菜单栏
+        Logmenubar = self.menuBar()
+        LogMenu = Logmenubar.addMenu('&日志')
+        LogMenu.addMenu(Log_Sw_menu)
+        LogMenu.addMenu(Log_Type_menu)
 
         self.setGeometry(300, 300, 800, 300)
         self.setWindowTitle('Menu')
@@ -832,7 +933,7 @@ class Serial_Tool_MainUI(QMainWindow):
     def SaveDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         if fname[0]:
-            # print(fname[0])
+            # self.UseLog.Log_Output(fname[0])
             f = open(fname[0], 'w')
             with f:
                 f.write(self.MyWidget.RecvtextEdit.toPlainText())
@@ -840,10 +941,27 @@ class Serial_Tool_MainUI(QMainWindow):
 
     def Start_Draw(self):
         try:
-            self.UseDraw = Serial_Tool_PaintWithAxisUi()#Serial_Tool_Paint()
+            self.UseDraw = Serial_Tool_PaintWithAxisUi(self.UseLog) #Serial_Tool_Paint()
             self.UseDraw.show()
         except Exception as e:
-            print("Error:", e)
+            self.UseLog.Log_Output("Error:", e)
+
+    def Debug_Option(self):
+        sender = self.sender()
+
+        if sender.text() == "打开日志输出":
+            self.UseLog.Change_Switch(True)
+            self.Log_SwOFF.setChecked(False)
+            self.Log_SwON.setChecked(True)
+
+        if sender.text() == "关闭日志输出":
+            self.UseLog.Change_Switch(False)
+            self.Log_SwON.setChecked(False)
+            self.Log_SwOFF.setChecked(True)
+
+        if sender.text() == "日志输出类型1":
+            self.UseLog.Change_Type(1)
+            self.Log_Type1.setChecked(True)
 
 
 
