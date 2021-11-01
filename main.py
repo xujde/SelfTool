@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (QWidget, QToolTip, QPushButton, QApplication, QDesk
                              QComboBox, QLineEdit, QListWidget, QCheckBox, QListWidgetItem, QGroupBox)
 from PyQt5.QtGui import QFont, QIcon, QPainter, QColor, QPen, QBrush, QPixmap
 from PyQt5.QtCore import QCoreApplication, Qt, QRect, QSize, pyqtSignal, QThread, QPoint, QMetaObject, QTimer
+from matplotlib.backend_bases import MouseButton
 from serial import Serial
 import serial.tools.list_ports
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -430,25 +431,28 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         self.UseFigure = Figure(figsize=(width, height), dpi=70)
         super(Serial_Tool_PaintWithAxis, self).__init__(self.UseFigure)
         self.Axis = self.UseFigure.add_subplot(111)  # 111表示1行1列，第一张曲线图
-        self.Data_Num = 100     # X轴最大值,要大于1
+        self.Data_Num = 200     # X轴最大值,要大于1（即X轴长度）
         self.YData_Max = 120    # Y轴最大值
         self.Updata_Count = 0  # 累计更新Updata_Count个数据后更新绘图，必须小于self.Data_Num
+        self.Sign_Num = 2
+        self.HLine = [self.Axis.axhline(0, visible=True) for i in range(self.Sign_Num)]#平行于X轴
+        self.VLine = [self.Axis.axvline(0, visible=True) for i in range(self.Sign_Num)]#平行于Y轴
 
     def Add_Line(self, x_data, y_data, y2_data=None):
         self.Line = Line2D(x_data, y_data)  # 绘制2D折线图
 
         # ------------------调整折线图基本样式---------------------#
 
-        # self.line.set_ls('--')  # 设置连线
-        # self.line.set_marker('*') # 设置每个点
-        # self.line.set_color('red')  # 设置线条颜色
+        # self.Line.set_ls('--')  # 设置连线
+        # self.Line.set_marker('*') # 设置每个点
+        self.Line.set_color('red')  # 设置线条颜色
 
         self.Axis.grid(True)  # 添加网格
         self.Axis.set_title('动态曲线')  # 设置标题
 
         # 设置xy轴最大最小值,找到x_data, y_data最大最小值
-        self.Axis.set_xlim(np.min(x_data), np.max(x_data))
-        self.Axis.set_ylim(np.min(y_data), np.max(y_data) + 2)  # y轴稍微多一点，会好看一点
+        self.Axis.set_xlim(np.min(x_data), np.max(x_data), auto = True)
+        self.Axis.set_ylim(np.min(y_data), np.max(y_data) + 2, auto = True)  # y轴稍微多一点，会好看一点
 
         self.Axis.set_xlabel('x坐标')  # 设置坐标名称
         self.Axis.set_ylabel('y坐标')
@@ -456,7 +460,7 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         # 在曲线下方填充颜色
         # self.ax.fill_between(x_data, y_data, color='g', alpha=0.1)
 
-        # self.ax.legend([self.line], ['sinx'])  # 添加图例
+        self.Axis.legend([self.Line], ['Temp'])  # 添加图例
 
         # ------------------------------------------------------#
         self.Axis.add_line(self.Line)
@@ -476,22 +480,22 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
     def __init__(self, Log):
         super(Serial_Tool_PaintWithAxisUi, self).__init__()
         self.UseLog = Log
+        self.Sign_Select = 1
 
         self.setWindowTitle('绘制动态曲线')
-        self.resize(1000, 800)
+        Wide = 1000;High = 800
+        self.Start_X = 10;self.Start_Y = 10
+        self.resize(Wide, High)
 
         # 创建一个groupbox, 用来画动态曲线
         self.groupBox = QGroupBox(self)
-        self.groupBox.setGeometry(QRect(100, 200, 800, 300))
+        self.groupBox.setGeometry(QRect(self.Start_X, self.Start_Y, Wide - 2*self.Start_X, High - 2*self.Start_Y))
 
         self.LineFigureLayout = QGridLayout(self.groupBox)
 
-        self.StartButton = QPushButton('开始', self)
-        self.StopButton = QPushButton("停止", self)
-        self.StartButton.clicked.connect(self.PushButtonClickedHandle)
-        self.StopButton.clicked.connect(self.PushButtonClickedHandle)
-        self.LineFigureLayout.addWidget(self.StartButton, 1, 0)
-        self.LineFigureLayout.addWidget(self.StopButton, 1, 1)
+        self.Button_Init()
+
+        self.LineEdit_Init()
 
         self.Load_DynamicLine()  # 加载动态曲线
 
@@ -514,7 +518,9 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
     def Load_DynamicLine(self):
         self.LineFigure = Serial_Tool_PaintWithAxis()
 
-        self.LineFigureLayout.addWidget(self.LineFigure, 0, 0, 1, 2)
+        self.LineFigure.UseFigure.canvas.mpl_connect('button_press_event', self.Mouse_pressEvent)  # 鼠标事件处理
+
+        self.LineFigureLayout.addWidget(self.LineFigure, 0, 0, 1, 5)
 
         if oneself == True:  # 如果是模块自己运行则启动多线程发送随机数
             # 准备数据，绘制曲线
@@ -535,6 +541,60 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             self.LineFigure.Updata_Count = 1
 
         self.LineFigure.Add_Line(x_data, y_data)
+
+    def Button_Init(self):
+        self.StartButton = QPushButton('开始', self)
+        self.StopButton = QPushButton("停止", self)
+        self.SaveButton = QPushButton("保存", self)
+        self.StartButton.clicked.connect(self.PushButtonClickedHandle)
+        self.StopButton.clicked.connect(self.PushButtonClickedHandle)
+        self.SaveButton.clicked.connect(self.PushButtonClickedHandle)
+        self.LineFigureLayout.addWidget(self.StartButton, 1, 0)
+        self.LineFigureLayout.addWidget(self.StopButton, 1, 1)
+        self.LineFigureLayout.addWidget(self.SaveButton, 1, 2)
+
+    def LineEdit_Init(self):
+        X1LineEdit = QLabel('X1')
+        Y1LineEdit = QLabel('Y1')
+        X2LineEdit = QLabel('X2')
+        Y2LineEdit = QLabel('Y2')
+        XDiffLineEdit = QLabel('X-Diff')
+        YDiffLineEdit = QLabel('Y-Diff')
+
+        self.X1LineEdit = QLineEdit()
+        self.Y1LineEdit = QLineEdit()
+        self.X2LineEdit = QLineEdit()
+        self.Y2LineEdit = QLineEdit()
+        self.XDiffLineEdit = QLineEdit()
+        self.YDiffLineEdit = QLineEdit()
+
+        self.XY1Button = QRadioButton('XY1', self)
+        self.XY2Button = QRadioButton('XY2', self)
+
+        self.LineFigureLayout.addWidget(self.XY1Button, 2, 0)
+        self.LineFigureLayout.addWidget(X1LineEdit, 2, 1)
+        self.LineFigureLayout.addWidget(self.X1LineEdit, 2, 2)
+        self.LineFigureLayout.addWidget(Y1LineEdit, 2, 3)
+        self.LineFigureLayout.addWidget(self.Y1LineEdit, 2, 4)
+        self.LineFigureLayout.addWidget(self.XY2Button, 3, 0)
+        self.LineFigureLayout.addWidget(X2LineEdit, 3, 1)
+        self.LineFigureLayout.addWidget(self.X2LineEdit, 3, 2)
+        self.LineFigureLayout.addWidget(Y2LineEdit, 3, 3)
+        self.LineFigureLayout.addWidget(self.Y2LineEdit, 3, 4)
+        self.LineFigureLayout.addWidget(XDiffLineEdit, 4, 1)
+        self.LineFigureLayout.addWidget(self.XDiffLineEdit, 4, 2)
+        self.LineFigureLayout.addWidget(YDiffLineEdit, 4, 3)
+        self.LineFigureLayout.addWidget(self.YDiffLineEdit, 4, 4)
+
+        self.XY1Button.toggled.connect(self.XYButton)
+        self.XY2Button.toggled.connect(self.XYButton)
+
+        self.X1LineEdit.setText(str(0.0))
+        self.Y1LineEdit.setText(str(0.0))
+        self.X2LineEdit.setText(str(0.0))
+        self.Y2LineEdit.setText(str(0.0))
+        self.XDiffLineEdit.setText(str(0.0))
+        self.YDiffLineEdit.setText(str(0.0))
 
     def UpdateData_OneSelf(self):
         dt = time.time() - self.TimeStamp
@@ -579,6 +639,15 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         if sender.text() == "停止":
             PaintWithAxis_Start_Flag = False
 
+        if sender.text() == "保存":
+            fname = QFileDialog.getOpenFileName(self, 'Open file', '/first.png')
+            # 增加对文件格式的判断
+            try:
+                self.LineFigure.UseFigure.savefig(fname[0], dpi=400, bbox_inches='tight')
+                self.UseLog("Save Picture Success")
+            except Exception as e:
+                self.UseLog("Save Picture Error:", e)
+
     def closeEvent(self, event):
         reply = QMessageBox.question(self, 'Message',
                                      "Are you sure to quit?", QMessageBox.Yes |
@@ -589,6 +658,49 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             event.accept()
         else:
             event.ignore()
+    #动态调整窗口大小
+    def resizeEvent(self, event):
+        Change_wide = event.size().width()
+        Change_high = event.size().height()
+        self.UseLog.Log_Output("Change_wide:", Change_wide, ",Change_high:", Change_high)
+        self.groupBox.setGeometry(QRect(self.Start_X, self.Start_Y, Change_wide - 2 * self.Start_X, Change_high - 2 * self.Start_Y))
+
+    def Mouse_pressEvent(self, event):
+        self.UseLog.Log_Output("event.xdata", event.xdata, "event.ydata", event.ydata, "event.button", event.button)
+        if event.button == MouseButton.LEFT:
+            self.LineFigure.HLine[self.Sign_Select - 1].set_ydata(event.ydata)
+            self.LineFigure.HLine[self.Sign_Select - 1].set_visible(True)
+            if self.Sign_Select == 1:
+                self.X1LineEdit.setText(str(event.ydata))
+            elif self.Sign_Select == 2:
+                self.X2LineEdit.setText(str(event.ydata))
+
+        if event.button == MouseButton.RIGHT:
+            self.LineFigure.VLine[self.Sign_Select - 1].set_xdata(event.xdata)
+            self.LineFigure.VLine[self.Sign_Select - 1].set_visible(True)
+            if self.Sign_Select == 1:
+                self.Y1LineEdit.setText(str(event.xdata))
+            elif self.Sign_Select == 2:
+                self.Y2LineEdit.setText(str(event.xdata))
+
+        if event.button == MouseButton.MIDDLE:
+            self.LineFigure.HLine[self.Sign_Select - 1].set_visible(False)
+            self.LineFigure.VLine[self.Sign_Select - 1].set_visible(False)
+
+        self.XDiffLineEdit.setText(str(float(self.X1LineEdit.text()) - float(self.X2LineEdit.text())))
+        self.YDiffLineEdit.setText(str(float(self.Y1LineEdit.text()) - float(self.Y2LineEdit.text())))
+
+        self.LineFigure.draw()  # 重新画图
+
+    def XYButton(self):
+        sender = self.sender()
+        if sender.text() == "XY1":
+            self.Sign_Select = 1
+            self.UseLog.Log_Output("XY1")
+
+        if sender.text() == "XY2":
+            self.Sign_Select = 2
+            self.UseLog.Log_Output("XY2")
 
 class Serial_Tool_SerThread(QThread, threading.Thread):
     Signal = pyqtSignal(str)
@@ -634,8 +746,8 @@ class Serial_Tool_Ser(Serial):
             Signal.emit(self.Strglo)
             if self.UseSer.in_waiting:
                 ReadString =  self.UseSer.read( self.UseSer.in_waiting).decode("gbk")
+                self.SerialRecvData_Analyze(ReadString)#自定义数据解析处理
                 self.Strglo += ReadString
-                print("SerialReadData:", len(self.Strglo))
                 Signal.emit(self.Strglo)
                 global PaintWithAxis_UpdateData
                 PaintWithAxis_UpdateData = int(ReadString)
@@ -653,6 +765,10 @@ class Serial_Tool_Ser(Serial):
         self.Send_Count = 0
         if self.UseSer.isOpen:
             self.Send_Count = self.UseSer.write(text.encode("gbk"))  # 写数据
+
+    # 串口接收数据解析处理
+    def SerialRecvData_Analyze(self, Recv_Str):
+        print(Recv_Str)
 
 class Serial_Tool_Widget(QWidget):
     def __init__(self, Log):
