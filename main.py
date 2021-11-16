@@ -28,6 +28,7 @@ PaintWithAxis_Start_Flag = False  #绘图打开标志
 PaintWithAxis_UpdateData = " "
 PaintWithAxis_UpdateData_Flag = False #发送串口接收数据信号标志
 PaintWithAxis_UpdateData_separator = ','
+PaintWithAxis_UpdateData_Index = 1
 
 #复选框
 class ComboCheckBox(QComboBox):
@@ -421,7 +422,7 @@ class Serial_Tool_PaintWithAxisThread(QThread):
             if(Ser_Open_Flag and PaintWithAxis_UpdateData_Flag):
                 #Value = 1#random.randint(1, 100) #可换成需要的真实数据
                 self.signal.emit(PaintWithAxis_UpdateData) #发送信号
-                PaintWithAxis_UpdateData_Flag = True
+                PaintWithAxis_UpdateData_Flag = False
             # else:
             #     Value = random.randint(1, 100)
             #     self.signal.emit(Value)  # 发送信号
@@ -455,8 +456,10 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         self.Axis.set_title('动态曲线')  # 设置标题
 
         # 设置xy轴最大最小值,找到x_data, y_data最大最小值
-        self.Axis.set_xlim(np.min(x_data), np.max(x_data), auto = True)
+        self.Axis.set_xlim(np.min(x_data), np.max(x_data) + 2, auto = True)
         self.Axis.set_ylim(np.min(y_data), np.max(y_data) + 2, auto = True)  # y轴稍微多一点，会好看一点
+        self.XData_Max = np.min(x_data)
+        self.YData_Max = np.max(y_data)
 
         self.Axis.set_xlabel('x坐标')  # 设置坐标名称
         self.Axis.set_ylabel('y坐标')
@@ -478,6 +481,17 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         #
         self.Axis2 = self.Axis.twinx()
         self.Axis2.set_ylim(np.min(y_data), np.max(y_data) + 2)
+        self.Axis2.set_ylabel('y2坐标')
+
+    def Change_Axis_XYlim(self, X_Data, Y_Data):
+        self.Axis.set_xlim(np.min(X_Data), np.max(X_Data) + 2, auto=True)
+        self.Axis.set_ylim(np.min(Y_Data), np.max(Y_Data) + 2, auto=True)  # y轴稍微多一点，会好看一点
+
+        self.XData_Max = np.min(X_Data)
+        self.YData_Max = np.max(Y_Data)
+
+        self.Axis2 = self.Axis.twinx()
+        self.Axis2.set_ylim(np.min(Y_Data), np.max(Y_Data) + 2)
         self.Axis2.set_ylabel('y2坐标')
 
 class Serial_Tool_PaintWithAxisUi(QMainWindow):
@@ -613,16 +627,19 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.LineFigure.draw()  # 重新画图
 
     def UpdateData_UseSignal(self, New_data):
-        #需要增加接收到的数据比坐标轴最大值更大处理
         y_data = self.Update_Data_Analyse(New_data)
         self.LineFigure.Updata_Count = len(y_data)
         for i in range(0, self.LineFigure.Data_Num - self.LineFigure.Updata_Count):
             self.LineFigure.Update_Y_Data[i] = self.LineFigure.Update_Y_Data[i + self.LineFigure.Updata_Count]
         for j in range(0, self.LineFigure.Updata_Count):
-            self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - self.LineFigure.Updata_Count + j - 1] = y_data[j]
+            self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - self.LineFigure.Updata_Count + j] = y_data[j]
+        if(np.max(self.LineFigure.Update_Y_Data) > self.LineFigure.YData_Max):#接收到的数据比坐标轴最大值大时更新坐标轴
+            Update_X_data = np.arange(0, self.LineFigure.Data_Num, 1)
+            self.LineFigure.Change_Axis_XYlim(Update_X_data, self.LineFigure.Update_Y_Data)
         self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)  # 更新数据
         self.LineFigure.draw()  # 重新画图
 
+        self.UseLog.Log_Output("y_data len:", len(y_data), "y:", self.LineFigure.Update_Y_Data)
         # x_data = int(time.time() - self.TimeStamp)
         # if (x_data%self.LineFigure.Updata_Count):
         #     self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - self.LineFigure.Updata_Count + x_data - 1] = New_data
@@ -719,12 +736,22 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
 
     def Update_Data_Analyse(self, Source_Data):
         #解析接收到的字符串数据，先按指定分隔符切片，再将切片之后的数据转换成整型
-        Source_List = Source_Data.split(PaintWithAxis_UpdateData_separator)
-        Result_List = [0 for i in range(len(Source_List))]
-        print("Source_List len:", len(Source_List))
-        # for i in range(len(Source_List)):
-        #     Result_List[i] = int(Source_List)
-        return Result_List
+        Source_List = Source_Data.split('\r\n') #分出行数据
+        for i in range(len(Source_List) - 1):
+            Source_List[i] = Source_List[i].split(PaintWithAxis_UpdateData_separator)
+
+        Result_List = [0 for i in range(len(Source_List) - 1)]
+        for i in range(len(Source_List) - 1):
+            Result_List[i] = [0 for j in range(len(Source_List[i]))]
+
+        for i in range(len(Source_List) - 1):
+            for j in range(len(Source_List[i])):
+                try:
+                    Result_List[i][j] = float(Source_List[i][j])
+                except Exception as e:
+                    self.UseLog.Log_Output("str to int Error", e)
+                self.UseLog.Log_Output("Source_List[", i, "][", j, "]:", Source_List[i][j], type(Source_List[i][j]), Result_List[i][j])
+        return Result_List[PaintWithAxis_UpdateData_Index]
 
 class Serial_Tool_SerThread(QThread, threading.Thread):
     Signal = pyqtSignal(str)
