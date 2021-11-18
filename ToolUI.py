@@ -277,7 +277,7 @@ class Tool_Widget(QWidget):
         self.Tool_ComboCheckBox.setMinimumSize(QSize(100, 20))
 
         #行编辑和文本编辑框
-        self.ToolInputtextEdit = QLineEdit()
+        self.ToolInputLineEdit = QLineEdit()
         self.ToolOutputtextEdit = QTextEdit()
 
         #按钮
@@ -312,7 +312,7 @@ class Tool_Widget(QWidget):
         grid.addWidget(self.ToolComboCheckBox, X_Index + X_ToolComboCheckBoxOffset, Y_Index)
         grid.addWidget(self.Tool_ComboCheckBox, X_Index + X_ToolComboCheckBoxOffset, Y_Index + Y_TooltextEditStep)
 
-        grid.addWidget(self.ToolInputtextEdit, X_Index + X_TooltextEditOffset, Y_Index + Y_TooltextEditOffset)
+        grid.addWidget(self.ToolInputLineEdit, X_Index + X_TooltextEditOffset, Y_Index + Y_TooltextEditOffset)
         grid.addWidget(self.ToolOutputtextEdit, X_Index + X_TooltextEditOffset, Y_Index + Y_TooltextEditOffset + Y_TooltextEditStep)
 
         grid.addWidget(self.ToolClearInputQPushButton, X_Index , Y_Index + Y_ToolPushButtonOffset)
@@ -327,7 +327,7 @@ class Tool_Widget(QWidget):
         sender = self.sender()
 
         if sender.text() == "清空输入框":
-            self.ToolInputtextEdit.clear()
+            self.ToolInputLineEdit.clear()
 
         if sender.text() == "清空输出框":
             self.ToolOutputtextEdit.clear()
@@ -344,7 +344,7 @@ class Tool_Widget(QWidget):
 class Tool_MainUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.UseLog = ToolSystem.Serial_Tool_Log()
+        self.UseLog = ToolSystem.Self_Tool_Log()
         self.Tool_MainUI_Init()
 
     def Tool_MainUI_Init(self):
@@ -366,11 +366,11 @@ class Tool_MainUI(QMainWindow):
         self.Open_file_menu = QAction(QIcon('Open.png'), "打开", self)
         self.Open_file_menu.setShortcut('Ctrl+' + 'O')
         self.Open_file_menu.setStatusTip('Open File')
-        self.Open_file_menu.triggered.connect(self.ReloadDialog)
+        self.Open_file_menu.triggered.connect(self.Tool_ReloadDialog)
         self.Save_file_menu = QAction(QIcon('Save.jpeg'), "保存", self)
         self.Save_file_menu.setShortcut('Ctrl+' + 'S')
         self.Save_file_menu.setStatusTip('Save File')
-        self.Save_file_menu.triggered.connect(self.SaveDialog)
+        self.Save_file_menu.triggered.connect(self.Tool_SaveDialog)
         # 创建一个菜单栏
         filemenubar = self.menuBar()
         # 添加菜单
@@ -386,7 +386,7 @@ class Tool_MainUI(QMainWindow):
         Log_type1 = QAction("日志输出类型1", self, checkable=True)
         Log_type1.setStatusTip('Use Print Output')
         Log_type1.setChecked(True)
-        Log_type1.triggered.connect(self.Log_Option)
+        Log_type1.triggered.connect(self.Tool_LogOption)
         self.LogTypeList.append(Log_type1)
 
         Log_type_menu = QMenu('日志输出类型', self)
@@ -399,12 +399,12 @@ class Tool_MainUI(QMainWindow):
         Log_Sysmodule = QAction("系统日志模块", self, checkable=True)
         Log_Sysmodule.setStatusTip('系统日志模块')
         Log_Sysmodule.setChecked(False)
-        Log_Sysmodule.triggered.connect(self.Log_Option)
+        Log_Sysmodule.triggered.connect(self.Tool_LogOption)
         self.LogModuleList.append(Log_Sysmodule)
         Log_Uimodule = QAction("UI日志模块", self, checkable=True)
         Log_Uimodule.setStatusTip('UI日志模块')
         Log_Uimodule.setChecked(False)
-        Log_Uimodule.triggered.connect(self.Log_Option)
+        Log_Uimodule.triggered.connect(self.Tool_LogOption)
         self.LogModuleList.append(Log_Uimodule)
 
         Log_Modue_menu = QMenu('日志模块选项', self)
@@ -418,7 +418,7 @@ class Tool_MainUI(QMainWindow):
             Log_level = QAction("日志输出等级"+str(i+1), self, checkable=True)
             Log_level.setStatusTip('日志输出等级'+str(i+1))
             Log_level.setChecked(False)
-            Log_level.triggered.connect(self.Log_Option)
+            Log_level.triggered.connect(self.Tool_LogOption)
             self.LogLevelList.append(Log_level)
 
         Log_Level_menu = QMenu('日志输出等级', self)
@@ -432,15 +432,15 @@ class Tool_MainUI(QMainWindow):
         LogMenu.addMenu(Log_Level_menu)
         LogMenu.addMenu(Log_type_menu)
 
-    def ReloadDialog(self):
+    def Tool_ReloadDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         if fname[0]:
             f = open(fname[0], 'r')
             with f:
                 data = f.read()
-                self.UseWidget.ToolInputtextEdit.setText(data)
+                self.UseWidget.ToolInputLineEdit.setText(data)
 
-    def SaveDialog(self):
+    def Tool_SaveDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         if fname[0]:
             self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
@@ -449,7 +449,7 @@ class Tool_MainUI(QMainWindow):
                 f.write(self.UseWidget.ToolOutputtextEdit.toPlainText())
             f.close()
 
-    def Log_Option(self):
+    def Tool_LogOption(self):
         sender = self.sender()
         try:
 

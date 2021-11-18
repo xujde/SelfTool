@@ -22,7 +22,7 @@ class LogLevel(Enum):
     LogLevelMax = Level8
 
 #调试日志功能
-class Serial_Tool_Log():
+class Self_Tool_Log():
     def __init__(self, parent=None):
         self.LogType = 1 #1为print打印
         self.LogModule = 0
@@ -49,7 +49,7 @@ class Serial_Tool_Log():
         self.LogLevel = cLevel
 
 ## 使用字典管理自定义多文件共享全局变量
-class Serial_Tool_GlobalManager():
+class Self_Tool_GlobalManager():
     def __init__(self):
         global GlobalVal_dict
         GlobalVal_dict = { }
