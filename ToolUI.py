@@ -363,11 +363,11 @@ class Tool_MainUI(QMainWindow):
         self.show()
 
     def Tool_FileMenu_Init(self):
-        self.Open_file_menu = QAction(QIcon('Open.png'), "打开", self)
+        self.Open_file_menu = QAction(QIcon('./Logo_Picture/Open.png'), "打开", self)
         self.Open_file_menu.setShortcut('Ctrl+' + 'O')
         self.Open_file_menu.setStatusTip('Open File')
         self.Open_file_menu.triggered.connect(self.Tool_ReloadDialog)
-        self.Save_file_menu = QAction(QIcon('Save.jpeg'), "保存", self)
+        self.Save_file_menu = QAction(QIcon('./Logo_Picture/Save.jpeg'), "保存", self)
         self.Save_file_menu.setShortcut('Ctrl+' + 'S')
         self.Save_file_menu.setStatusTip('Save File')
         self.Save_file_menu.triggered.connect(self.Tool_SaveDialog)
@@ -435,7 +435,7 @@ class Tool_MainUI(QMainWindow):
     def Tool_ReloadDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         if fname[0]:
-            f = open(fname[0], 'r')
+            f = open(fname[0], 'r', encoding = 'utf-8')
             with f:
                 data = f.read()
                 self.UseWidget.ToolInputLineEdit.setText(data)
@@ -444,7 +444,7 @@ class Tool_MainUI(QMainWindow):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         if fname[0]:
             self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
-            f = open(fname[0], 'w')
+            f = open(fname[0], 'w', encoding = 'utf-8')
             with f:
                 f.write(self.UseWidget.ToolOutputtextEdit.toPlainText())
             f.close()
