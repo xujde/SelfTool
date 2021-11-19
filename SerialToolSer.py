@@ -2,8 +2,11 @@ import threading, time
 from PyQt5.QtCore import QThread, pyqtSignal
 from serial import Serial
 import serial.tools.list_ports
+import binascii
 
 import System
+from System import LogModule
+from System import LogLevel
 
 class Serial_Tool_SerThread(QThread, threading.Thread):
     Signal = pyqtSignal(str)
@@ -31,7 +34,7 @@ class Serial_Tool_Ser(Serial):
         self.UseGlobalVal = GlobalVal
         self.UseSer = serial.Serial(portx, buand, timeout=timeout)
         if self.UseSer.isOpen:
-            self.UseLog.Log_Output(bytesize, stopbits, parity)
+            self.UseLog.Log_Output(LogModule.SerModule, LogLevel.Level3, bytesize, stopbits, parity)
             self.UseSer.BYTESIZES = bytesize
             self.UseSer.STOPBITS = stopbits
             self.UseSer.PARITIES = parity
@@ -41,7 +44,7 @@ class Serial_Tool_Ser(Serial):
             try:
                 self.SerThread = Serial_Tool_SerThread(self.SerialReadData, self.UseGlobalVal)
             except Exception as e:
-                self.UseLog.Log_Output("Serial_Tool_Ser 创建线程异常：", e)
+                self.UseLog.Log_Output(LogModule.SerModule, LogLevel.Level1, "Serial_Tool_Ser 创建线程异常：", e)
 
     # 显示接收串口数据
     def SerialReadData(self, Signal):
@@ -51,11 +54,14 @@ class Serial_Tool_Ser(Serial):
             # Signal.emit(self.Strglo)
             if self.UseSer.in_waiting:
                 # print("in_waiting", self.UseSer.in_waiting)
+                ReadSource = self.UseSer.read(self.UseSer.in_waiting)
                 try :
-                    ReadString =  self.UseSer.read( self.UseSer.in_waiting).decode(encoding = 'utf-8')
-                    self.Strglo += ReadString
+                    ReadString =  ReadSource.decode('utf-8')#self.UseSer.read(self.UseSer.in_waiting).decode(encoding = 'utf-8')
                 except Exception as e:
                     print("SerialReadData Error:", e)
+                    ReadString = binascii.b2a_hex(ReadSource).decode('utf-8')
+                    # print(ReadSource, "b2a_hex", ReadString)
+                self.Strglo += ReadString
                 # print("Strglo :", self.Strglo, type(self.Strglo))
                 Signal.emit(self.Strglo)
                 if System.Serial_Tool_GlobalManager.Global_Get(self.UseGlobalVal, 'PaintWithAxis_Start_Flag'):
@@ -64,7 +70,7 @@ class Serial_Tool_Ser(Serial):
                         time.sleep(1)
                         Wait_Count = Wait_Count + 1
                         if(Wait_Count > 10):
-                            self.UseLog.Log_Output("PaintWithAxis not use UpdateData")
+                            self.UseLog.Log_Output(LogModule.SerModule, LogLevel.Level3, "PaintWithAxis not use UpdateData")
                             break;
                     System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_UpdateData', ReadString)
                     System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_UpdateData_Flag', True)

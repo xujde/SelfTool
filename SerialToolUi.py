@@ -14,6 +14,8 @@ import numpy as np
 
 import System
 import SerialToolSer
+from System import LogModule
+from System import LogLevel
 
 matplotlib.rcParams['font.sans-serif'] = ['SimHei']  # 解决坐标轴中文显示问题
 matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号不显示的问题
@@ -604,18 +606,20 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
 
     def UpdateData_UseSignal(self, New_data):
         y_data = self.Update_Data_Analyse(New_data)
-        self.LineFigure.Updata_Count = len(y_data)
-        for i in range(0, self.LineFigure.Data_Num - self.LineFigure.Updata_Count):
-            self.LineFigure.Update_Y_Data[i] = self.LineFigure.Update_Y_Data[i + self.LineFigure.Updata_Count]
-        for j in range(0, self.LineFigure.Updata_Count):
-            self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - self.LineFigure.Updata_Count + j] = y_data[j]
-        if(np.max(self.LineFigure.Update_Y_Data) > self.LineFigure.YData_Max):#接收到的数据比坐标轴最大值大时更新坐标轴
-            Update_X_data = np.arange(0, self.LineFigure.Data_Num, 1)
-            self.LineFigure.Change_Axis_XYlim(Update_X_data, self.LineFigure.Update_Y_Data)
-        self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)  # 更新数据
-        self.LineFigure.draw()  # 重新画图
+        if len(y_data) > 0:
+            self.LineFigure.Updata_Count = len(y_data)
+            for i in range(0, self.LineFigure.Data_Num - self.LineFigure.Updata_Count):
+                self.LineFigure.Update_Y_Data[i] = self.LineFigure.Update_Y_Data[i + self.LineFigure.Updata_Count]
+            for j in range(0, self.LineFigure.Updata_Count):
+                self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - self.LineFigure.Updata_Count + j] = y_data[j]
+            if(np.max(self.LineFigure.Update_Y_Data) > self.LineFigure.YData_Max):#接收到的数据比坐标轴最大值大时更新坐标轴
+                Update_X_data = np.arange(0, self.LineFigure.Data_Num, 1)
+                self.LineFigure.Change_Axis_XYlim(Update_X_data, self.LineFigure.Update_Y_Data)
+            self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)  # 更新数据
+            self.LineFigure.draw()  # 重新画图
 
-        self.UseLog.Log_Output("y_data len:", len(y_data), "y:", self.LineFigure.Update_Y_Data)
+        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "y_data len:", len(y_data), "y:", self.LineFigure.Update_Y_Data)
+
         # x_data = int(time.time() - self.TimeStamp)
         # if (x_data%self.LineFigure.Updata_Count):
         #     self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - self.LineFigure.Updata_Count + x_data - 1] = New_data
@@ -624,8 +628,8 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         #     self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - 1] = New_data
         #     if(x_data != 0):
         #         self.TimeStamp = time.time()
-        #         self.UseLog.Log_Output("x:", x_data, "TimeStamp:", int(self.TimeStamp),"New_data:", New_data)
-        #         self.UseLog.Log_Output("y:", self.LineFigure.Update_Y_Data)
+        #         self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "x:", x_data, "TimeStamp:", int(self.TimeStamp),"New_data:", New_data)
+        #         self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "y:", self.LineFigure.Update_Y_Data)
         #         self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)  # 更新数据
         #         self.LineFigure.draw()  # 重新画图
         #
@@ -640,7 +644,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             if not System.Serial_Tool_GlobalManager.Global_Get(self.UseGlobalVal, 'PaintWithAxis_Start_Flag'):
                 System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_Start_Flag', True)
                 self.TimeStamp = time.time()
-                self.PaintWithAxisThread = Serial_Tool_PaintWithAxisThread()
+                self.PaintWithAxisThread = Serial_Tool_PaintWithAxisThread(self.UseGlobalVal)
                 self.PaintWithAxisThread.signal.connect(self.UpdateData_UseSignal)
                 self.PaintWithAxisThread.start()
         if sender.text() == "停止":
@@ -651,9 +655,9 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             # 增加对文件格式的判断
             try:
                 self.LineFigure.UseFigure.savefig(fname[0], dpi=400, bbox_inches='tight')
-                self.UseLog("Save Picture Success")
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Save Picture Success")
             except Exception as e:
-                self.UseLog("Save Picture Error:", e)
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "Save Picture Error:", e)
 
     def closeEvent(self, event):
         reply = QMessageBox.question(self, 'Message',
@@ -668,11 +672,11 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
     def resizeEvent(self, event):
         Change_wide = event.size().width()
         Change_high = event.size().height()
-        self.UseLog.Log_Output("Change_wide:", Change_wide, ",Change_high:", Change_high)
+        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "Change_wide:", Change_wide, ",Change_high:", Change_high)
         self.groupBox.setGeometry(QRect(self.Start_X, self.Start_Y, Change_wide - 2 * self.Start_X, Change_high - 2 * self.Start_Y))
 
     def Mouse_pressEvent(self, event):
-        self.UseLog.Log_Output("event.xdata", event.xdata, "event.ydata", event.ydata, "event.button", event.button)
+        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "event.xdata", event.xdata, "event.ydata", event.ydata, "event.button", event.button)
         if event.button == MouseButton.LEFT:
             self.LineFigure.HLine[self.Sign_Select - 1].set_ydata(event.ydata)
             self.LineFigure.HLine[self.Sign_Select - 1].set_visible(True)
@@ -704,11 +708,11 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         sender = self.sender()
         if sender.text() == "XY1":
             self.Sign_Select = 1
-            self.UseLog.Log_Output("XY1")
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "XY1")
 
         if sender.text() == "XY2":
             self.Sign_Select = 2
-            self.UseLog.Log_Output("XY2")
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "XY2")
 
     def Update_Data_Analyse(self, Source_Data):
         #解析接收到的字符串数据，先按指定分隔符切片，再将切片之后的数据转换成整型
@@ -725,8 +729,13 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                 try:
                     Result_List[i][j] = float(Source_List[i][j])
                 except Exception as e:
-                    self.UseLog.Log_Output("str to float Error", e)
-                self.UseLog.Log_Output("Source_List[", i, "][", j, "]:", Source_List[i][j], type(Source_List[i][j]), Result_List[i][j])
+                    self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "str to float Error", e)
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Source_List[", i, "][", j, "]:", Source_List[i][j], type(Source_List[i][j]), Result_List[i][j])
+
+        if len(Source_List) < PaintWithAxis_UpdateData_Index or len(Result_List) < PaintWithAxis_UpdateData_Index:   #源数据不完整无法解析出想要的数据
+            Error_List = []
+            return Error_List
+
         return Result_List[PaintWithAxis_UpdateData_Index]
 
 class Serial_Tool_Widget(QWidget):
@@ -752,7 +761,7 @@ class Serial_Tool_Widget(QWidget):
         self.Data_Bits = ['5', '6', '7', '8']
         self.Stop_Bits = ['1', '1.5', '2']
         self.Parity_Bits = ['None', 'Odd', 'Even', 'Mark', 'Space']
-        self.UseLog.Log_Output("list", self.port_list)
+        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level8, "list", self.port_list)
 
         self.Ui_SetUp()
         self.Ui_Layout()
@@ -796,7 +805,7 @@ class Serial_Tool_Widget(QWidget):
         self.Port_comboBox = QComboBox(self)
         for i in range(0, len(self.port_list)):
             self.port_list[i] = str(self.port_list[i])
-            self.UseLog.Log_Output(type(self.port_list[i]))
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level8, type(self.port_list[i]))
         self.Port_comboBox.addItems(self.port_list)
 
         self.Baud_comboBox = QComboBox(self)
@@ -876,7 +885,7 @@ class Serial_Tool_Widget(QWidget):
                 self.ByteSize = int(self.Data_comboBox.currentText())
             if len(self.Stop_comboBox.currentText()):
                 self.StopBits = float(self.Stop_comboBox.currentText())
-            self.UseLog.Log_Output(len(self.OpenPort), self.BaudRate, self.ByteSize, self.StopBits)
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, len(self.OpenPort), self.BaudRate, self.ByteSize, self.StopBits)
             if (len(self.OpenPort) != 0 or self.BaudRate != 0):
                 self.Serial = SerialToolSer.Serial_Tool_Ser(self.OpenPort, self.BaudRate, self.ByteSize, self.StopBits, self.Parity, None, self.UseLog, self.UseGlobalVal)
                 if (self.Serial.Open_Ret == True):  # 判断串口是否成功打开
@@ -884,32 +893,32 @@ class Serial_Tool_Widget(QWidget):
                         self.OpenButton.setEnabled(False)
                         self.Serial.SerThread.Signal.connect(self.ShowRecvData)
                         self.Serial.SerThread.start()
-                        self.UseLog.Log_Output(sender.text() + ' ' + self.OpenPort + ' Successful')
+                        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' ' + self.OpenPort + ' Successful')
                     except Exception as e:
-                        self.UseLog.Log_Output("打开串口异常:", e)
+                        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "打开串口异常:", e)
                 else:
-                    self.UseLog.Log_Output(sender.text() + ' Fail')
+                    self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' Fail')
             else:
-                self.UseLog.Log_Output(' Please Select Port')
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, ' Please Select Port')
 
         if sender.text() == "关闭串口":
             self.OpenButton.setEnabled(True)
             if (self.Serial.Open_Ret == True):
                 self.Serial.SerialColsePort()
-                self.UseLog.Log_Output(sender.text() + ' Successful')
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' Successful')
 
         if sender.text() == "发送数据":
             if (self.Serial.Open_Ret == True):
                 if(self.Format):
                     self.Serial.SerialWritePort(self.Sendtext_Edit.text())
-                    self.UseLog.Log_Output("Dex 写入字节数：", self.Serial.Send_Count)
+                    self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "Dex 写入字节数：", self.Serial.Send_Count)
                     self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + self.Sendtext_Edit.text())
                 else:
                     self.Serial.SerialWritePort(self.Sendtext_Edit.text().encode('utf-8').hex())
-                    self.UseLog.Log_Output("Hex 写入字节数：", self.Serial.Send_Count)
+                    self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "Hex 写入字节数：", self.Serial.Send_Count)
                     self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + self.Sendtext_Edit.text().encode('utf-8').hex())
             else:
-                self.UseLog.Log_Output(sender.text() + ' ERROR')
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' ERROR')
 
         if sender.text() == "清空发送框":
             self.Sendtext_Edit.clear()
@@ -921,7 +930,7 @@ class Serial_Tool_Widget(QWidget):
             self.port_list = list(serial.tools.list_ports.comports())
             for i in range(0, len(self.port_list)):
                 self.port_list[i] = str(self.port_list[i])
-                self.UseLog.Log_Output(type(self.port_list[i]))
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, type(self.port_list[i]))
             self.Port_comboBox.clear()
             self.Port_comboBox.addItems(self.port_list)
 
@@ -929,38 +938,38 @@ class Serial_Tool_Widget(QWidget):
         sender = self.sender()
         if sender.text() == "Dex":
             self.Format = True
-            self.UseLog.Log_Output("Dex")
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "Dex")
 
         if sender.text() == "Hex":
             self.Format = False
-            self.UseLog.Log_Output("Hex")
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "Hex")
 
     # 选定串口
     def GetOpenPort(self, port_str):
         if len(port_str):
             Front_index = port_str.find('(')
             Rear_index = port_str.find(')')
-            self.UseLog.Log_Output(len(port_str), Front_index, Rear_index)
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, len(port_str), Front_index, Rear_index)
             return port_str[Front_index+1:Rear_index]
-        self.UseLog.Log_Output("NUll")
+        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Get Serial Port NUll")
         return ''
 
     def ShowRecvData(self, RecvData):
-        self.UseLog.Log_Output("ShowRecvData:", RecvData,"len:", len(RecvData))
+        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "ShowRecvData:", RecvData,"len:", len(RecvData))
         if(len(RecvData)):
             try:
                 self.Recvtext_Edit.append(RecvData)
             except Exception as e:
-                self.UseLog.Log_Output("ShowRecvData  Recvtext_Edit append Error:", e)
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "ShowRecvData  Recvtext_Edit append Error:", e)
 
 class Serial_Tool_MainUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.UseLog = System.Serial_Tool_Log()
         self.UseGlobalVal = System.Serial_Tool_GlobalManager()  # 初始化参数
-        self.initUI()
+        self.Serial_Tool_MainUI_Init()
 
-    def initUI(self):
+    def Serial_Tool_MainUI_Init(self):
         self.UseWidget = Serial_Tool_Widget(self.UseLog, self.UseGlobalVal)
         self.setCentralWidget(self.UseWidget)
         # self.MyDraw = Serial_Tool_Paint()#Serial_Tool_Draw()
@@ -992,39 +1001,75 @@ class Serial_Tool_MainUI(QMainWindow):
         DrawMenu = Drawmenubar.addMenu('&画图')
         DrawMenu.addAction(self.Start_Draw_menu)
 
-        #显示勾选
-        self.Log_Type1 = QAction("日志输出类型1", self, checkable = True)
-        self.Log_Type1.setStatusTip('Use Print Output')
-        self.Log_Type1.setChecked(True)
-        self.Log_Type1.triggered.connect(self.Debug_Option)
-        Log_Type_menu = QMenu('日志输出类型', self)
-        Log_Type_menu.addAction(self.Log_Type1)
-        self.Log_SwON = QAction("打开日志输出", self, checkable = True)
-        self.Log_SwON.setStatusTip('Debug Switch ON')
-        self.Log_SwON.setChecked(False)
-        self.Log_SwON.triggered.connect(self.Debug_Option)
-        self.Log_SwOFF = QAction("关闭日志输出", self, checkable = True)
-        self.Log_SwOFF.setStatusTip('Debug Switch OFF')
-        self.Log_SwOFF.setChecked(True)
-        self.Log_SwOFF.triggered.connect(self.Debug_Option)
-        Log_Sw_menu = QMenu('日志开关', self)
-        Log_Sw_menu.addAction(self.Log_SwON)
-        Log_Sw_menu.addAction(self.Log_SwOFF)
-        # 创建一个菜单栏
-        Logmenubar = self.menuBar()
-        LogMenu = Logmenubar.addMenu('&日志')
-        LogMenu.addMenu(Log_Sw_menu)
-        LogMenu.addMenu(Log_Type_menu)
+        self.Serial_Tool_LogMenu_Init()
 
         self.setGeometry(300, 300, 800, 300)
         self.setWindowTitle('Serial_Tool')
         self.setWindowIcon(QIcon('./Logo_Picture/SerialToolMainUI.jpeg'))
         self.show()
 
+    def Serial_Tool_LogMenu_Init(self):
+        #日志输出类型UI选项
+        self.LogTypeList = []
+
+        Log_type1 = QAction("日志输出类型1", self, checkable=True)
+        Log_type1.setStatusTip('Use Print Output')
+        Log_type1.setChecked(True)
+        Log_type1.triggered.connect(self.Tool_LogOption)
+        self.LogTypeList.append(Log_type1)
+
+        Log_type_menu = QMenu('日志输出类型', self)
+        for i in range(len(self.LogTypeList)):
+            Log_type_menu.addAction(self.LogTypeList[i])
+
+        # 日志输出模块UI选项
+        self.LogModuleList = []
+
+        Log_Sysmodule = QAction("系统日志模块", self, checkable=True)
+        Log_Sysmodule.setStatusTip('系统日志模块')
+        Log_Sysmodule.setChecked(False)
+        Log_Sysmodule.triggered.connect(self.Tool_LogOption)
+        self.LogModuleList.append(Log_Sysmodule)
+        Log_Uimodule = QAction("UI日志模块", self, checkable=True)
+        Log_Uimodule.setStatusTip('UI日志模块')
+        Log_Uimodule.setChecked(False)
+        Log_Uimodule.triggered.connect(self.Tool_LogOption)
+        self.LogModuleList.append(Log_Uimodule)
+        Log_Sermodule = QAction("串口日志模块", self, checkable=True)
+        Log_Sermodule.setStatusTip('串口日志模块')
+        Log_Sermodule.setChecked(False)
+        Log_Sermodule.triggered.connect(self.Tool_LogOption)
+        self.LogModuleList.append(Log_Sermodule)
+
+        Log_Modue_menu = QMenu('日志模块选项', self)
+        for i in range(len(self.LogModuleList)):
+            Log_Modue_menu.addAction(self.LogModuleList[i])
+
+        # 日志输出等级UI选项
+        self.LogLevelList = []
+
+        for i in range(int(str(LogLevel.LogLevelMax.value))):
+            Log_level = QAction("日志输出等级"+str(i+1), self, checkable=True)
+            Log_level.setStatusTip('日志输出等级'+str(i+1))
+            Log_level.setChecked(False)
+            Log_level.triggered.connect(self.Tool_LogOption)
+            self.LogLevelList.append(Log_level)
+
+        Log_Level_menu = QMenu('日志输出等级', self)
+        for i in range(len(self.LogLevelList)):
+            Log_Level_menu.addAction(self.LogLevelList[i])
+
+        # 创建一个菜单栏
+        Logmenubar = self.menuBar()
+        LogMenu = Logmenubar.addMenu('&日志')
+        LogMenu.addMenu(Log_Modue_menu)
+        LogMenu.addMenu(Log_Level_menu)
+        LogMenu.addMenu(Log_type_menu)
+
     def ReloadDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         if fname[0]:
-            f = open(fname[0], 'r')
+            f = open(fname[0], 'r', encoding = 'utf-8')
             with f:
                 data = f.read()
                 self.UseWidget.Recvtext_Edit.setText(data)
@@ -1033,8 +1078,8 @@ class Serial_Tool_MainUI(QMainWindow):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         try:
             if fname[0]:
-                # self.UseLog.Log_Output(fname[0])
-                f = open(fname[0], 'w')
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
+                f = open(fname[0], 'w', encoding = 'utf-8')
                 with f:
                     f.write(self.UseWidget.Recvtext_Edit.toPlainText())
                 f.close()
@@ -1047,21 +1092,35 @@ class Serial_Tool_MainUI(QMainWindow):
             self.UseDraw.setWindowIcon(QIcon('./Logo_Picture/PaintUI.jpeg'))
             self.UseDraw.show()
         except Exception as e:
-            self.UseLog.Log_Output("Draw New Paint Error:", e)
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "Draw New Paint Error:", e)
 
-    def Debug_Option(self):
+    def Tool_LogOption(self):
         sender = self.sender()
+        try:
 
-        if sender.text() == "打开日志输出":
-            self.UseLog.Change_Switch(True)
-            self.Log_SwOFF.setChecked(False)
-            self.Log_SwON.setChecked(True)
+            for i in range(len(self.LogTypeList)):  # 日志输出类型选项只选其一
+                if sender.text() == self.LogTypeList[i].text():
+                    self.UseLog.Change_Type(i + 1)
+                    self.LogTypeList[i].setChecked(True)
+                    for r in range(len(self.LogTypeList)):
+                        if r != i:  # 将未选中的选项取消
+                            self.LogTypeList[r].setChecked(False)
+                            # print("LogTypeList", i, sender.text(), r)
 
-        if sender.text() == "关闭日志输出":
-            self.UseLog.Change_Switch(False)
-            self.Log_SwON.setChecked(False)
-            self.Log_SwOFF.setChecked(True)
+            for j in range(len(self.LogModuleList)):  # 日志输出模块选项可多选
+                if sender.text() == self.LogModuleList[j].text():
+                    self.UseLog.Change_Module((j + 1), self.LogModuleList[j].isChecked())
+                    self.LogModuleList[j].setChecked(self.LogModuleList[j].isChecked())
+                    # print("LogModuleList", j, sender.text(), self.LogModuleList[j].isChecked())
 
-        if sender.text() == "日志输出类型1":
-            self.UseLog.Change_Type(1)
-            self.Log_Type1.setChecked(True)
+            for k in range(len(self.LogLevelList)):  # 日志等级选项只选其一
+                if sender.text() == self.LogLevelList[k].text():
+                    self.UseLog.Change_Level(k + 1)
+                    self.LogLevelList[k].setChecked(True)
+                    for r in range(len(self.LogLevelList)):
+                        if r != k:  # 将未选中的选项取消
+                            self.LogLevelList[r].setChecked(False)
+                            # print("LogLevelList", k, sender.text(), r)
+
+        except Exception as e:
+            print("log option error:", e)
