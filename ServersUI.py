@@ -1,10 +1,8 @@
-import random, time, threading
-from PyQt5.QtWidgets import (QWidget, QToolTip, QPushButton, QApplication, QDesktopWidget, QMessageBox,
-                             QHBoxLayout, QVBoxLayout, QMainWindow, QAction, qApp,  QTextEdit, QLCDNumber, QSlider,
-                             QInputDialog, QLineEdit, QGridLayout, QFileDialog, QLabel, QRadioButton,
-                             QComboBox, QLineEdit, QListWidget, QCheckBox, QListWidgetItem, QGroupBox, QMenu)
-from PyQt5.QtGui import QFont, QIcon, QPainter, QColor, QPen, QBrush, QPixmap
-from PyQt5.QtCore import QCoreApplication, Qt, QRect, QSize, pyqtSignal, QThread, QPoint, QMetaObject, QTimer
+import socket
+from PyQt5.QtWidgets import (QWidget, QMenu, QMainWindow, QAction, QTextEdit,QGridLayout, QFileDialog,
+                             QPushButton, QLabel, QRadioButton, QComboBox, QLineEdit)
+from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import QRect, QSize, pyqtSignal, QThread
 import matplotlib
 
 #以下为自定义模块
@@ -17,16 +15,19 @@ matplotlib.rcParams['font.sans-serif'] = ['SimHei']  # 解决坐标轴中文显�
 matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号不显示的问题
 
 
-class Servers_Widget(QWidget):
-    def __init__(self, UseLog):
+class Servers_Widget(QWidget, QThread):
+    def __init__(self, UseLog, Soc):
         super().__init__()
         self.UseLog = UseLog
+        self.UseSoc = Soc
 
         self.Servers_Widget_Init()
 
     def Servers_Widget_Init(self):
         self.ServersUI_Setup()
         self.ServersUI_Layout()
+
+        self.UseSoc.AccpetThread.Signal.connect(self.ServerUpdateUiData)
 
     def ServersUI_Setup(self):
         #单选框
@@ -35,6 +36,19 @@ class Servers_Widget(QWidget):
         self.Servers_ComboBox = QComboBox(self)
         self.Servers_ComboBox.addItems(self.ServersComboBoxList)
         self.Servers_ComboBox.setMinimumSize(QSize(100, 20))
+
+        self.Servers_IpAddr = QLabel('服务器地址')
+        self.Servers_Ip_Addr = QLabel()
+        self.Servers_Ip_Addr.setGeometry(QRect(10, 20, 100, 20))
+        self.Servers_Ip_Addr.setText(str(socket.gethostbyname(self.UseSoc.host)))
+        self.Servers_PortNum = QLabel('服务器端口')
+        self.Servers_Port_Num = QLabel()
+        self.Servers_Port_Num.setGeometry(QRect(10, 20, 100, 20))
+        self.Servers_Port_Num.setText(str(self.UseSoc.port))
+        self.Servers_LinkNum = QLabel('连接次数')
+        self.Servers_Link_Num = QLabel()
+        self.Servers_Link_Num.setGeometry(QRect(10, 20, 100, 20))
+        self.Servers_Link_Num.setText(str(self.UseSoc.AccpetThread.Client_Link_Num))
 
         #行编辑和文本编辑框
         self.ServersLineEdit = QLineEdit()
@@ -61,12 +75,22 @@ class Servers_Widget(QWidget):
 
         X_Index = 1;Y_Index = 0
         Y_ServersComboBoxStep = 1
+        X_ServersLabelOffset = 1;X_ServersLabelStep = 1;Y_ServersLabelStep = 1
         Y_ServersPushButtonOffset = 2;Y_ServersPushButtonStep = 1
         X_ServersEditOffset = 2;Y_ServersEditOffset = 2;Y_ServersEditStep = 1
         Y_ServersRadioButtontOffset = 4;X_ServersRadioButtonStep = 2
 
         grid.addWidget(self.ServersComboBox, X_Index, Y_Index)
         grid.addWidget(self.Servers_ComboBox, X_Index, Y_Index + Y_ServersComboBoxStep)
+
+        grid.addWidget(self.Servers_IpAddr, X_Index + X_ServersLabelOffset, Y_Index)
+        grid.addWidget(self.Servers_Ip_Addr, X_Index +  X_ServersLabelOffset, Y_Index + Y_ServersLabelStep)
+
+        grid.addWidget(self.Servers_PortNum, X_Index + X_ServersLabelOffset + X_ServersLabelStep, Y_Index)
+        grid.addWidget(self.Servers_Port_Num, X_Index + X_ServersLabelOffset + X_ServersLabelStep, Y_Index + Y_ServersLabelStep)
+
+        grid.addWidget(self.Servers_LinkNum, X_Index + X_ServersLabelOffset + X_ServersLabelStep*2, Y_Index)
+        grid.addWidget(self.Servers_Link_Num, X_Index + X_ServersLabelOffset + X_ServersLabelStep*2, Y_Index + Y_ServersLabelStep)
 
         grid.addWidget(self.ServersLineEdit, X_Index + X_ServersEditOffset, Y_Index + Y_ServersEditOffset)
         grid.addWidget(self.ServerstextEdit, X_Index + X_ServersEditOffset, Y_Index + Y_ServersEditOffset + Y_ServersEditStep)
@@ -97,12 +121,15 @@ class Servers_Widget(QWidget):
         if sender.text() == "Dex":
             self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3,"Dex")
 
+    def ServerUpdateUiData(self, data):
+        self.Servers_Link_Num.setText(str(data))
+
 class Servers_MainUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.UseLog = ServersSystem.Servers_Log()
         self.UseSoc = ServersSocket.Servers_Socket(self.UseLog)
-        self.UseWidget = Servers_Widget(self.UseLog)
+        self.UseWidget = Servers_Widget(self.UseLog, self.UseSoc)
         self.Servers_MainUI_Init()
 
     def Servers_MainUI_Init(self):
@@ -197,7 +224,7 @@ class Servers_MainUI(QMainWindow):
     def Servers_ReloadDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         if fname[0]:
-            f = open(fname[0], 'r')
+            f = open(fname[0], 'r', encoding = 'utf-8')
             with f:
                 data = f.read()
                 self.UseWidget.ServersLineEdit.setText(data)
@@ -206,7 +233,7 @@ class Servers_MainUI(QMainWindow):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         if fname[0]:
             self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
-            f = open(fname[0], 'w')
+            f = open(fname[0], 'w', encoding = 'utf-8')
             with f:
                 f.write(self.UseWidget.ServerstextEdit.toPlainText())
             f.close()

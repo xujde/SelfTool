@@ -32,6 +32,8 @@ class Servers_ClientHandleThread(QThread, threading.Thread):
 
 
 class Servers_AcceptThread(QThread, threading.Thread):
+    Signal = pyqtSignal(int)
+
     def __init__(self, Socket, Log, parent=None):
         super(Servers_AcceptThread, self).__init__(parent)
         self.Socket = Socket
@@ -84,7 +86,7 @@ class Servers_AcceptThread(QThread, threading.Thread):
             self.ClientLinkTime[Index] = time.time()
 
             self.Client_Link_Num = self.Client_Link_Num + 1
-
+            self.Signal.emit(self.Client_Link_Num)
             self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level2, 'Index:', Index, '连接地址：', self.Client_addr[Index], 'ClientLinkTime:', self.ClientLinkTime[Index])
 
     def Change_ClientLinkFlag(self, cClient_id):
