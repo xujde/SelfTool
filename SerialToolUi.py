@@ -16,6 +16,7 @@ import System
 import SerialToolSer
 from System import LogModule
 from System import LogLevel
+from System import LogType
 
 matplotlib.rcParams['font.sans-serif'] = ['SimHei']  # 解决坐标轴中文显示问题
 matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号不显示的问题
@@ -24,233 +25,6 @@ oneself = False  # 标志为模块自己产生随机数绘图
 PaintWithAxis_UpdateData_separator = ','
 PaintWithAxis_UpdateData_Index = 1
 
-#复选框
-class ComboCheckBox(QComboBox):
-    def loadItems(self, items):
-        self.items = items
-        self.items.insert(0, '全部')
-        self.row_num = len(self.items)
-        self.Selectedrow_num = 0
-        self.qCheckBox = []
-        self.qLineEdit = QLineEdit()
-        self.qLineEdit.setReadOnly(True)
-        self.qListWidget = QListWidget()
-        self.addQCheckBox(0)
-        self.qCheckBox[0].stateChanged.connect(self.All)
-        for i in range(0, self.row_num):
-            self.addQCheckBox(i)
-            self.qCheckBox[i].stateChanged.connect(self.showMessage)
-        self.setModel(self.qListWidget.model())
-        self.setView(self.qListWidget)
-        self.setLineEdit(self.qLineEdit)
-        # self.qLineEdit.textChanged.connect(self.printResults)
-
-    def showPopup(self):
-        #  重写showPopup方法，避免下拉框数据多而导致显示不全的问题
-        select_list = self.Selectlist()  # 当前选择数据
-        self.loadItems(items=self.items[1:])  # 重新添加组件
-        for select in select_list:
-            index = self.items[:].index(select)
-            self.qCheckBox[index].setChecked(True)  # 选中组件
-        return QComboBox.showPopup(self)
-
-    def printResults(self):
-        list = self.Selectlist()
-        print(list)
-
-    def addQCheckBox(self, i):
-        self.qCheckBox.append(QCheckBox())
-        qItem = QListWidgetItem(self.qListWidget)
-        self.qCheckBox[i].setText(str(self.items[i]))
-        self.qListWidget.setItemWidget(qItem, self.qCheckBox[i])
-
-    def Selectlist(self):
-        Outputlist = []
-        for i in range(1, self.row_num):
-            if self.qCheckBox[i].isChecked() == True:
-                Outputlist.append(self.qCheckBox[i].text())
-        self.Selectedrow_num = len(Outputlist)
-        return Outputlist
-
-    def showMessage(self):
-        Outputlist = self.Selectlist()
-        self.qLineEdit.setReadOnly(False)
-        self.qLineEdit.clear()
-        show = ';'.join(Outputlist)
-
-        if self.Selectedrow_num == 0:
-            self.qCheckBox[0].setCheckState(0)
-        elif self.Selectedrow_num == self.row_num - 1:
-            self.qCheckBox[0].setCheckState(2)
-        else:
-            self.qCheckBox[0].setCheckState(1)
-        self.qLineEdit.setText(show)
-        self.qLineEdit.setReadOnly(True)
-
-    def All(self, zhuangtai):
-        if zhuangtai == 2:
-            for i in range(1, self.row_num):
-                self.qCheckBox[i].setChecked(True)
-        elif zhuangtai == 1:
-            if self.Selectedrow_num == 0:
-                self.qCheckBox[0].setCheckState(2)
-        elif zhuangtai == 0:
-            self.clear()
-
-    def clear(self):
-        for i in range(self.row_num):
-            self.qCheckBox[i].setChecked(False)
-
-    def currentText(self):
-        text = QComboBox.currentText(self).split(';')
-        if text.__len__() == 1:
-            if not text[0]:
-                return []
-        return text
-
-class Serial_Tool_Draw(QWidget):
-    def __init__(self):
-        super().__init__()
-
-        self.initUI() #界面绘制交给InitUi方法
-
-    def initUI(self, Form):
-        self.text = u'\u041b\u0435\u0432 \u041d\u0438\u043a\u043e\u043b\u0430\
-        \u0435\u0432\u0438\u0447 \u0422\u043e\u043b\u0441\u0442\u043e\u0439: \n\
-        \u0410\u043d\u043d\u0430 \u041a\u0430\u0440\u0435\u043d\u0438\u043d\u0430'
-
-
-        #设置窗口的位置和大小
-        self.setGeometry(300, 300, 300, 200)
-        self.center()
-        # 设置窗口的标题
-        self.setWindowTitle('Draw')
-        # 设置窗口的图标，引用当前目录下的icon.jpeg图片
-        self.setWindowIcon(QIcon('icon.jpeg'))
-        self.show()
-
-    def Start(self):
-        self.show()
-
-    # 控制窗口显示在屏幕中心的方法
-    def center(self):
-        # 获得窗口
-        qr = self.frameGeometry()
-        # 获得屏幕中心点
-        cp = QDesktopWidget().availableGeometry().center()
-        # 显示到屏幕中心
-        qr.moveCenter(cp)
-        self.move(qr.topLeft())
-
-    def closeEvent(self, event):
-        reply = QMessageBox.question(self, 'Message',
-                                     "Are you sure to quit?", QMessageBox.Yes |
-                                     QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            event.accept()
-        else:
-            event.ignore()
-
-    def paintEvent(self, event):
-        qp = QPainter()
-        qp.begin(self)
-        # self.drawText(event, qp, self.text)
-        # self.drawPoints(qp, 10, 10)
-        # self.drawRectangles(qp, '#d4d4d4', 0, 0, 100, 10, 35, 90, 60)
-        self.drawLines(qp,Qt.SolidLine, 2, 10, 15, 100, 25)
-        # self.drawBrushes(qp)
-        qp.end()
-
-    def drawText(self, event, qp, text):
-        qp.setPen(QColor(168, 34, 3))
-        qp.setFont(QFont('Decorative', 10))
-        qp.drawText(event.rect(), Qt.AlignCenter, text)
-
-    def drawPoints(self, qp, x, y):
-        size = self.size()
-        qp.drawPoint(x, y)
-        # for i in range(1000):
-        #     x = random.randint(1, size.width() - 1)
-        #     y = random.randint(1, size.height() - 1)
-        #     qp.drawPoint(x, y)
-
-    def drawRectangles(self, qp, Color_Name, R, G, B, X, Y, X_Size, Y_Size):
-        col = QColor(0, 0, 0)
-        col.setNamedColor(Color_Name)
-        qp.setPen(col)
-
-        qp.setBrush(QColor(R, G, B))
-        qp.drawRect(X, Y, X_Size, Y_Size)
-        #
-        # qp.setBrush(QColor(255, 80, 0, 160))
-        # qp.drawRect(130, 35, 90, 60)
-        #
-        # qp.setBrush(QColor(25, 0, 90, 200))
-        # qp.drawRect(250, 35, 90, 60)
-
-    def drawLines(self, qp, Pen_Style, Pen_Wide, X1, Y1, X2, Y2):
-        pen = QPen(Qt.black, Pen_Wide, Qt.SolidLine)
-        pen.setStyle(Pen_Style)
-        qp.setPen(pen)
-        qp.drawLine(X1, Y1, X2, Y2)
-
-        # pen.setStyle(Qt.DashLine)
-        # qp.setPen(pen)
-        # qp.drawLine(20, 80, 250, 80)
-        #
-        # pen.setStyle(Qt.DashDotLine)
-        # qp.setPen(pen)
-        # qp.drawLine(20, 120, 250, 120)
-        #
-        # pen.setStyle(Qt.DotLine)
-        # qp.setPen(pen)
-        # qp.drawLine(20, 160, 250, 160)
-        #
-        # pen.setStyle(Qt.DashDotDotLine)
-        # qp.setPen(pen)
-        # qp.drawLine(20, 200, 250, 200)
-
-        # pen.setStyle(Qt.CustomDashLine)
-        # pen.setDashPattern([1, 4, 5, 4])
-        # qp.setPen(pen)
-        # qp.drawLine(20, 240, 250, 240)
-
-    def drawBrushes(self, qp):
-        brush = QBrush(Qt.SolidPattern)
-        qp.setBrush(brush)
-        qp.drawRect(10, 15, 90, 60)
-
-        brush.setStyle(Qt.Dense1Pattern)
-        qp.setBrush(brush)
-        qp.drawRect(130, 15, 90, 60)
-
-        brush.setStyle(Qt.Dense2Pattern)
-        qp.setBrush(brush)
-        qp.drawRect(250, 15, 90, 60)
-
-        brush.setStyle(Qt.DiagCrossPattern)
-        qp.setBrush(brush)
-        qp.drawRect(10, 105, 90, 60)
-
-        brush.setStyle(Qt.Dense5Pattern)
-        qp.setBrush(brush)
-        qp.drawRect(130, 105, 90, 60)
-
-        brush.setStyle(Qt.Dense6Pattern)
-        qp.setBrush(brush)
-        qp.drawRect(250, 105, 90, 60)
-
-        brush.setStyle(Qt.HorPattern)
-        qp.setBrush(brush)
-        qp.drawRect(10, 195, 90, 60)
-
-        brush.setStyle(Qt.VerPattern)
-        qp.setBrush(brush)
-        qp.drawRect(130, 195, 90, 60)
-
-        brush.setStyle(Qt.BDiagPattern)
-        qp.setBrush(brush)
-        qp.drawRect(250, 195, 90, 60)
 
 class Serial_Tool_PaintThread(QThread):
     signal = pyqtSignal() #信号
@@ -1012,11 +786,16 @@ class Serial_Tool_MainUI(QMainWindow):
         #日志输出类型UI选项
         self.LogTypeList = []
 
-        Log_type1 = QAction("日志输出类型1", self, checkable=True)
-        Log_type1.setStatusTip('Use Print Output')
-        Log_type1.setChecked(True)
-        Log_type1.triggered.connect(self.Tool_LogOption)
-        self.LogTypeList.append(Log_type1)
+        Log_type = QAction("日志输出类型1", self, checkable=True)
+        Log_type.setStatusTip('Use Print Output')
+        Log_type.setChecked(True)
+        Log_type.triggered.connect(self.Tool_LogOption)
+        self.LogTypeList.append(Log_type)
+        Log_type = QAction("日志输出类型2", self, checkable=True)
+        Log_type.setStatusTip('Use File Output')
+        Log_type.setChecked(False)
+        Log_type.triggered.connect(self.Tool_LogOption)
+        self.LogTypeList.append(Log_type)
 
         Log_type_menu = QMenu('日志输出类型', self)
         for i in range(len(self.LogTypeList)):
@@ -1100,7 +879,7 @@ class Serial_Tool_MainUI(QMainWindow):
 
             for i in range(len(self.LogTypeList)):  # 日志输出类型选项只选其一
                 if sender.text() == self.LogTypeList[i].text():
-                    self.UseLog.Change_Type(i + 1)
+                    self.UseLog.Change_Type(LogType(i+1))
                     self.LogTypeList[i].setChecked(True)
                     for r in range(len(self.LogTypeList)):
                         if r != i:  # 将未选中的选项取消
@@ -1124,3 +903,13 @@ class Serial_Tool_MainUI(QMainWindow):
 
         except Exception as e:
             print("log option error:", e)
+
+    def closeEvent(self, event):
+        reply = QMessageBox.question(self, 'Message',
+                                     "Are you sure to quit?", QMessageBox.Yes |
+                                     QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            self.UseLog.Log_Close()
+            event.accept()
+        else:
+            event.ignore()
