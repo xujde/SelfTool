@@ -1,5 +1,6 @@
 import sys
 from enum import Enum
+import datetime
 
 class LogModule(Enum):
     # 可根据不同工程包含的模块进行增加
@@ -22,23 +23,41 @@ class LogLevel(Enum):
 
     LogLevelMax = Level8
 
+class LogType(Enum):
+    PrintType = 1 #print打印到stdout
+    LogfileType = 2 #print输出到文件
+
+
 #调试日志功能
 class Servers_Log():
     def __init__(self, parent=None):
-        self.LogType = 1 #1为print打印
+        self.LogType = LogType.PrintType
         self.LogModule = 0
         self.LogLevel = 0
 
-    def Log_Output(self, l_Module, l_Level, *objects, sep=' ', end='\n', file=sys.stdout, flush=False):
+        if self.LogType == LogType.LogfileType:#输出日志到文件先创建日志文件
+            self.Create_LogFile()
+
+    def Log_Output(self, l_Module, l_Level, *cObjects, cSep=' ', cEnd='\n', cFile=sys.stdout, cFlush=False):
         try:
             if ((self.LogModule & (1 << int(str(l_Module.value)))) and (self.LogLevel >= int(str(l_Level.value)))):
-                if(self.LogType == 1):
-                    print(*objects, sep=' ', end='\n', file=sys.stdout, flush=False)
+                if(self.LogType == LogType.PrintType):
+                    print(*cObjects, sep=cSep, end=cEnd, file=cFile, flush=cFlush)
+                elif(self.LogType == LogType.LogfileType):
+                    print(*cObjects, sep=cSep, end=cEnd, file=self.LogFile, flush=cFlush)
         except Exception as e:
             print("LOG OUTPUT ERROR:", e, str(l_Module.value), str(l_Level.value))
 
     def Change_Type(self, cType):
+        if  self.LogType == cType:
+            return
+        elif self.LogType == LogType.LogfileType:#上一个类型是日志文件则先关闭
+            self.LogFile.close()
+
         self.LogType = cType
+
+        if self.LogType == LogType.LogfileType:#切换为输出日志到文件创建日志文件
+            self.Create_LogFile()
 
     def Change_Module(self, cModule, cSwitch):
         if cSwitch:
@@ -48,6 +67,15 @@ class Servers_Log():
 
     def Change_Level(self, cLevel):
         self.LogLevel = cLevel
+
+    def Create_LogFile(self):
+        self.LogFile = open('./ServersLog.txt', 'a', encoding='utf-8')
+        self.LogFile.write(str(datetime.datetime.now()))
+        self.LogFile.write('\n')
+
+    def Log_Close(self):
+        if self.LogType == LogType.LogfileType:
+            self.LogFile.close()
 
 ## 使用字典管理自定义多文件共享全局变量
 class Servers_GlobalManager():

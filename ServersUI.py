@@ -1,6 +1,6 @@
 import socket
 from PyQt5.QtWidgets import (QWidget, QMenu, QMainWindow, QAction, QTextEdit,QGridLayout, QFileDialog,
-                             QPushButton, QLabel, QRadioButton, QComboBox, QLineEdit)
+                             QPushButton, QLabel, QRadioButton, QComboBox, QLineEdit, QMessageBox)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QRect, QSize, pyqtSignal, QThread
 import matplotlib
@@ -9,6 +9,7 @@ import matplotlib
 import ServersSystem
 from ServersSystem import LogModule
 from ServersSystem import LogLevel
+from ServersSystem import LogType
 import ServersSocket
 
 matplotlib.rcParams['font.sans-serif'] = ['SimHei']  # 解决坐标轴中文显示问题
@@ -172,6 +173,11 @@ class Servers_MainUI(QMainWindow):
         Log_type.setChecked(True)
         Log_type.triggered.connect(self.Servers_LogOption)
         self.LogTypeList.append(Log_type)
+        Log_type = QAction("日志输出类型2", self, checkable=True)
+        Log_type.setStatusTip('Use File Output')
+        Log_type.setChecked(False)
+        Log_type.triggered.connect(self.Servers_LogOption)
+        self.LogTypeList.append(Log_type)
 
         Log_type_menu = QMenu('日志输出类型', self)
         for i in range(len(self.LogTypeList)):
@@ -244,7 +250,7 @@ class Servers_MainUI(QMainWindow):
 
             for i in range(len(self.LogTypeList)):  #日志输出类型选项只选其一
                 if sender.text() == self.LogTypeList[i].text():
-                    self.UseLog.Change_Type(i+1)
+                    self.UseLog.Change_Type(LogType(i+1))
                     self.LogTypeList[i].setChecked(True)
                     for r in range(len(self.LogTypeList)):
                         if r != i:  #将未选中的选项取消
@@ -269,3 +275,13 @@ class Servers_MainUI(QMainWindow):
 
         except Exception as e:
             print("log option error:", e)
+
+    def closeEvent(self, event):
+        reply = QMessageBox.question(self, 'Message',
+                                     "Are you sure to quit?", QMessageBox.Yes |
+                                     QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            self.UseLog.Log_Close()
+            event.accept()
+        else:
+            event.ignore()
