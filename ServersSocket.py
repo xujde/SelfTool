@@ -1,5 +1,6 @@
 import socket, threading, time
 from PyQt5.QtCore import QThread, pyqtSignal
+from enum import Enum
 
 from ServersSystem import LogModule
 from ServersSystem import LogLevel
@@ -7,37 +8,66 @@ from ServersSystem import LogLevel
 Servers_Support_Client_Link_Num =  10
 Servers_Support_RecvData_Max = 2048 #接收的最大数据量
 
-class Servers_ClientHandleThread(QThread, threading.Thread):
-    Signal = pyqtSignal(socket.socket)
+Servers_TCP_Port = 2608 #TCP端口号
+Servers_UDP_Port = 1997 #UDP端口号
 
-    def __init__(self, Client_id, Log, parent=None):
-        super(Servers_ClientHandleThread, self).__init__(parent)
-        self.Client_id = Client_id
+class Protocol(Enum):
+    TCP = 1
+    UDP = 2
+    MQTT = 3
+
+class Servers_Socket():
+    def __init__(self, Log):
         self.UseLog = Log
+        self.UseProtocol = Protocol.UDP #后续绑定到UI切换
+        self.DataHandle = Servers_DataHandle(self)
+        self.host = socket.gethostname()  # 获取本地主机名
+        self.Socket_Create()
 
-    def run(self):
-        while (getattr(self.Client_id, "_closed") == False):
+    def Socket_Create(self):
+        if self.UseProtocol == Protocol.TCP:
+            self.Socket = socket.socket()  # 创建 socket 对象
+            self.port = Servers_TCP_Port  # 设置端口
+            self.Socket.bind((self.host, self.port))  # 绑定端口
+            self.Socket.listen(5)  # 等待客户端连接
             try:
-                recvdata = self.Client_id.recv(Servers_Support_RecvData_Max) #接收数据
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level5, "Client_id:", self.Client_id, ",recv data:", recvdata.decode())
-            except ConnectionAbortedError as e:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Servers close :", self.Client_id, e)
-                self.Signal.emit(self.Client_id)
-                break
+                self.AccpetThread = Servers_AcceptThread(self)
+                self.AccpetThread.start()
+            except Exception as e:
+                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Create AcceptThread Error:", e)
+        elif self.UseProtocol == Protocol.UDP:
+            self.Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 创建 socket 对象
+            self.port = Servers_UDP_Port  # 设置端口
+            self.Socket.bind((self.host, self.port))  # 绑定端口
+            try:
+                self.UDPThread = Servers_UDPThread(self)
+                self.UDPThread.start()
+            except Exception as e:
+                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Create UDPThread Error:", e)
 
-            if len(recvdata) == 0:
-                self.Signal.emit(self.Client_id)
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, self.Client_id, " close")
-                break
+    def Socket_Recv(self, Client_Id):
+        try:
+            data = Client_Id.recv(Servers_Support_RecvData_Max)  # 接收数据
+            self.DataHandle.Data_Analyse(self.DataHandle, data)
+        except ConnectionResetError as e:
+            self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, 'Recv Error:', e)
+
+    def Socket_Send(self, Client_Id, Send_Msg):
+        self.DataHandle.Data_Packet(Client_Id, Send_Msg)
+
+    def Socket_Close_Client(self, Client_Id):
+        Client_Id.close()
+        self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Servers close :", Client_Id)
 
 
 class Servers_AcceptThread(QThread, threading.Thread):
     Signal = pyqtSignal(int)
 
-    def __init__(self, Socket, Log, parent=None):
+    def __init__(self, Servers, parent=None):
         super(Servers_AcceptThread, self).__init__(parent)
-        self.Socket = Socket
-        self.UseLog = Log
+        self.Servers = Servers
+        self.Socket = Servers.Socket
+        self.UseLog = Servers.UseLog
         self.Client_id = []
         self.Client_addr = []
         self.ClientHandleThread = []
@@ -48,7 +78,7 @@ class Servers_AcceptThread(QThread, threading.Thread):
         while True:
             client_id, client_addr = self.Socket.accept()  # 建立客户端连接
             try:
-                ClientHandleThread = Servers_ClientHandleThread(client_id, self.UseLog)# 创建客户端
+                ClientHandleThread = Servers_ClientHandleThread(client_id, self.Servers)# 创建客户端
                 ClientHandleThread.Signal.connect(self.Change_ClientLinkFlag)
                 ClientHandleThread.start()
             except Exception as e:
@@ -71,7 +101,7 @@ class Servers_AcceptThread(QThread, threading.Thread):
                 Index = time_min_index
 
                 #断开连接
-                self.Client_id[Index].close()
+                self.Servers.Socket_Close_Client(self.Servers, self.Client_id[Index])
                 self.Client_id.pop(Index)
                 self.Client_addr.pop(Index)
                 self.ClientHandleThread.pop(Index)
@@ -96,30 +126,76 @@ class Servers_AcceptThread(QThread, threading.Thread):
                 self.ClientLinkTime[i] = 0
                 self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client", i, "close success")
 
-class Servers_Socket():
-    def __init__(self, Log):
-        self.UseLog = Log
-        self.Socket = socket.socket()  # 创建 socket 对象
-        self.host = socket.gethostname()  # 获取本地主机名
-        self.port = 2608  # 设置端口
-        self.Socket.bind((self.host, self.port))  # 绑定端口
-        self.Socket.listen(5)  # 等待客户端连接
+
+class Servers_ClientHandleThread(QThread, threading.Thread):
+    Signal = pyqtSignal(socket.socket)
+
+    def __init__(self, Client_id, Servers, parent=None):
+        super(Servers_ClientHandleThread, self).__init__(parent)
+        self.Servers = Servers
+        self.Client_id = Client_id
+        self.UseLog = Servers.UseLog
+
+    def run(self):
+        while (getattr(self.Client_id, "_closed") == False):
+            try:
+                recvdata = self.Client_id.recv(Servers_Support_RecvData_Max) #接收数据
+                self.Servers.DataHandle.Data_Analyse(self.Client_id, recvdata)
+            except ConnectionAbortedError as e:
+                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Servers close :", self.Client_id, e)
+                self.Signal.emit(self.Client_id)
+                break
+
+            if len(recvdata) == 0:
+                self.Signal.emit(self.Client_id)
+                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client close", self.Client_id)
+                break
+
+
+class Servers_UDPThread(QThread, threading.Thread):
+    Signal = pyqtSignal(int)
+
+    def __init__(self, Servers, parent=None):
+        super(Servers_UDPThread, self).__init__(parent)
+        self.Servers = Servers
+        self.Socket = Servers.Socket
+        self.UseLog = Servers.UseLog
+        self.Client_Link_Num = 0
+
+    def run(self):
+        while True:
+            client_data, client_addr = self.Socket.recvfrom(Servers_Support_RecvData_Max)
+            self.Servers.DataHandle.Data_Analyse(client_addr, client_data)
+            self.Client_Link_Num = self.Client_Link_Num + 1
+            self.Signal.emit(self.Client_Link_Num)
+
+
+class Servers_DataHandle():
+    def __init__(self, Servers, parent=None):
+        self.Servers = Servers
+        self.UseProtocol = Servers.UseProtocol
+        self.UseLog = Servers.UseLog
+
+    def Data_Analyse(self, Client, RecvData):
         try:
-            self.AccpetThread = Servers_AcceptThread(self.Socket, self.UseLog)
-            self.AccpetThread.start()
+            if self.UseProtocol == Protocol.TCP:
+                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client id:", Client, ",Recv data:", RecvData.decode())
+                #可增加需要回复的相关数据
+                self.Data_Packet(Client, RecvData)
+            elif self.UseProtocol == Protocol.UDP:
+                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client addr:", Client, ",Recv data:", RecvData)
+                self.Data_Packet(Client, RecvData)
         except Exception as e:
-            self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Create AcceptThread Error:", e)
+            print("Data_Analyse Error:", e)
 
-    def Socket_Recv(self, Client_id):
+    def Data_Packet(self,Client, SendData):
         try:
-            data = Client_id.recv(Servers_Support_RecvData_Max)  # 接收数据
-            self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, 'recive:', data.decode())  # 打印接收到的数据
-        except ConnectionResetError as e:
-            self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, 'Recv Error:', e)
-
-    def Socket_Send(self, Client_id, Send_Msg):
-        self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Send_Msg:", Send_Msg)
-        Client_id.send(Send_Msg.encode())
-
-    def Socket_Close_Client(self, Client_id):
-        Client_id.close()
+            if self.UseProtocol == Protocol.TCP:
+                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client id:", Client, ",Send data:",  SendData)
+                #可增加对回复数据的自定义打包
+                Client.send(SendData)
+            elif self.UseProtocol == Protocol.UDP:
+                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client addr:", Client, ",Send data:",  SendData)
+                self.Servers.Socket.sendto(SendData, Client)
+        except Exception as e:
+            print("Data_Packet Error:", e)

@@ -11,6 +11,7 @@ from ServersSystem import LogModule
 from ServersSystem import LogLevel
 from ServersSystem import LogType
 import ServersSocket
+from ServersSocket import Protocol
 
 matplotlib.rcParams['font.sans-serif'] = ['SimHei']  # 解决坐标轴中文显示问题
 matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号不显示的问题
@@ -27,16 +28,17 @@ class Servers_Widget(QWidget, QThread):
     def Servers_Widget_Init(self):
         self.ServersUI_Setup()
         self.ServersUI_Layout()
-
-        self.UseSoc.AccpetThread.Signal.connect(self.ServerUpdateUiData)
+        self.ServersUI_SignalInit()
 
     def ServersUI_Setup(self):
         #单选框
-        self.ServersComboBoxList = ['Tcp', 'Udp', 'Http', 'Https', 'Mqtt']
+        self.ServersComboBoxList = ['TCP', 'UDP', 'HTTP', 'HTTPS', 'MQTT']
         self.ServersComboBox = QLabel('网络协议')
         self.Servers_ComboBox = QComboBox(self)
         self.Servers_ComboBox.addItems(self.ServersComboBoxList)
         self.Servers_ComboBox.setMinimumSize(QSize(100, 20))
+        Servers_ComboBox_DefaultIndex = self.ServersComboBoxList.index(str(self.UseSoc.UseProtocol.name))
+        self.Servers_ComboBox.setCurrentIndex(Servers_ComboBox_DefaultIndex)  # 设置默认值
 
         self.Servers_IpAddr = QLabel('服务器地址')
         self.Servers_Ip_Addr = QLabel()
@@ -46,10 +48,14 @@ class Servers_Widget(QWidget, QThread):
         self.Servers_Port_Num = QLabel()
         self.Servers_Port_Num.setGeometry(QRect(10, 20, 100, 20))
         self.Servers_Port_Num.setText(str(self.UseSoc.port))
-        self.Servers_LinkNum = QLabel('连接次数')
         self.Servers_Link_Num = QLabel()
         self.Servers_Link_Num.setGeometry(QRect(10, 20, 100, 20))
-        self.Servers_Link_Num.setText(str(self.UseSoc.AccpetThread.Client_Link_Num))
+        if self.UseSoc.UseProtocol == Protocol.TCP:
+            self.Servers_LinkNum = QLabel('连接次数')
+            self.Servers_Link_Num.setText(str(self.UseSoc.AccpetThread.Client_Link_Num))
+        elif self.UseSoc.UseProtocol == Protocol.UDP:
+            self.Servers_LinkNum = QLabel('通信次数')
+            self.Servers_Link_Num.setText(str(self.UseSoc.UDPThread.Client_Link_Num))
 
         #行编辑和文本编辑框
         self.ServersLineEdit = QLineEdit()
@@ -103,6 +109,12 @@ class Servers_Widget(QWidget, QThread):
         grid.addWidget(self.ServersDexQRadioButton, X_Index + X_ServersRadioButtonStep, Y_Index + Y_ServersRadioButtontOffset)
 
         self.setLayout(grid)
+
+    def ServersUI_SignalInit(self):
+        if self.UseSoc.UseProtocol == Protocol.TCP:
+            self.UseSoc.AccpetThread.Signal.connect(self.ServerUpdateUiData)
+        elif self.UseSoc.UseProtocol == Protocol.UDP:
+            self.UseSoc.UDPThread.Signal.connect(self.ServerUpdateUiData)
 
     def ServersPushButtonClickedHandle(self):
         sender = self.sender()
