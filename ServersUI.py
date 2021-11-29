@@ -43,19 +43,13 @@ class Servers_Widget(QWidget, QThread):
         self.Servers_IpAddr = QLabel('服务器地址')
         self.Servers_Ip_Addr = QLabel()
         self.Servers_Ip_Addr.setGeometry(QRect(10, 20, 100, 20))
-        self.Servers_Ip_Addr.setText(str(socket.gethostbyname(self.UseSoc.host)))
         self.Servers_PortNum = QLabel('服务器端口')
         self.Servers_Port_Num = QLabel()
         self.Servers_Port_Num.setGeometry(QRect(10, 20, 100, 20))
-        self.Servers_Port_Num.setText(str(self.UseSoc.port))
+        self.Servers_LinkNum = QLabel()
         self.Servers_Link_Num = QLabel()
         self.Servers_Link_Num.setGeometry(QRect(10, 20, 100, 20))
-        if self.UseSoc.UseProtocol == Protocol.TCP:
-            self.Servers_LinkNum = QLabel('连接次数')
-            self.Servers_Link_Num.setText(str(self.UseSoc.AccpetThread.Client_Link_Num))
-        elif self.UseSoc.UseProtocol == Protocol.UDP:
-            self.Servers_LinkNum = QLabel('通信次数')
-            self.Servers_Link_Num.setText(str(self.UseSoc.UDPThread.Client_Link_Num))
+        self.ServerUpdateUiShow()
 
         #行编辑和文本编辑框
         self.ServersLineEdit = QLineEdit()
@@ -64,15 +58,15 @@ class Servers_Widget(QWidget, QThread):
         #按钮
         self.ServersClearInputQPushButton = QPushButton("清空输入框", self)
         self.ServersClearOutputQPushButton = QPushButton("清空输出框", self)
+        self.ServersSwitchProtocolQPushButton = QPushButton("切换协议", self)
+        self.ServersClearInputQPushButton.clicked.connect(self.ServersPushButtonClickedHandle)
+        self.ServersClearOutputQPushButton.clicked.connect(self.ServersPushButtonClickedHandle)
+        self.ServersSwitchProtocolQPushButton.clicked.connect(self.ServersPushButtonClickedHandle)
 
         #单选按钮
         self.ServersHexQRadioButton = QRadioButton('Hex', self)
         self.ServersDexQRadioButton = QRadioButton('Dex', self)
         self.ServersDexQRadioButton.setChecked(True)
-
-        self.ServersClearInputQPushButton.clicked.connect(self.ServersPushButtonClickedHandle)
-        self.ServersClearOutputQPushButton.clicked.connect(self.ServersPushButtonClickedHandle)
-
         self.ServersHexQRadioButton.toggled.connect(self.ServersRadioButtonClickedHandle)
         self.ServersDexQRadioButton.toggled.connect(self.ServersRadioButtonClickedHandle)
 
@@ -80,11 +74,11 @@ class Servers_Widget(QWidget, QThread):
         grid = QGridLayout()
         grid.setSpacing(20)
 
-        X_Index = 1;Y_Index = 0
+        X_Index = 1;Y_Index = 0 #X:行下标,Y:列下标
         Y_ServersComboBoxStep = 1
         X_ServersLabelOffset = 1;X_ServersLabelStep = 1;Y_ServersLabelStep = 1
-        Y_ServersPushButtonOffset = 2;Y_ServersPushButtonStep = 1
-        X_ServersEditOffset = 2;Y_ServersEditOffset = 2;Y_ServersEditStep = 1
+        X_ServersPushButtonStep = 1;Y_ServersPushButtonOffset = 3;
+        X_ServersEditOffset = 1;X_ServersEditStep = 1;Y_ServersEditOffset = 2;
         Y_ServersRadioButtontOffset = 4;X_ServersRadioButtonStep = 2
 
         grid.addWidget(self.ServersComboBox, X_Index, Y_Index)
@@ -100,10 +94,11 @@ class Servers_Widget(QWidget, QThread):
         grid.addWidget(self.Servers_Link_Num, X_Index + X_ServersLabelOffset + X_ServersLabelStep*2, Y_Index + Y_ServersLabelStep)
 
         grid.addWidget(self.ServersLineEdit, X_Index + X_ServersEditOffset, Y_Index + Y_ServersEditOffset)
-        grid.addWidget(self.ServerstextEdit, X_Index + X_ServersEditOffset, Y_Index + Y_ServersEditOffset + Y_ServersEditStep)
+        grid.addWidget(self.ServerstextEdit, X_Index + X_ServersEditOffset + X_ServersEditStep, Y_Index + Y_ServersEditOffset)
 
-        grid.addWidget(self.ServersClearInputQPushButton, X_Index , Y_Index + Y_ServersPushButtonOffset)
-        grid.addWidget(self.ServersClearOutputQPushButton, X_Index , Y_Index + Y_ServersPushButtonOffset + Y_ServersPushButtonStep)
+        grid.addWidget(self.ServersSwitchProtocolQPushButton, X_Index , Y_Index + Y_ServersPushButtonOffset)
+        grid.addWidget(self.ServersClearInputQPushButton, X_Index + X_ServersPushButtonStep, Y_Index + Y_ServersPushButtonOffset)
+        grid.addWidget(self.ServersClearOutputQPushButton, X_Index + 2*X_ServersPushButtonStep, Y_Index + Y_ServersPushButtonOffset)
 
         grid.addWidget(self.ServersHexQRadioButton, X_Index, Y_Index + Y_ServersRadioButtontOffset)
         grid.addWidget(self.ServersDexQRadioButton, X_Index + X_ServersRadioButtonStep, Y_Index + Y_ServersRadioButtontOffset)
@@ -125,6 +120,10 @@ class Servers_Widget(QWidget, QThread):
         if sender.text() == "清空输出框":
             self.ServerstextEdit.clear()
 
+        if sender.text() == "切换协议":
+            self.UseSoc.Socket_ProtocolSwitch(self.Servers_ComboBox.currentText())
+            self.ServerUpdateUiShow()
+
     def ServersRadioButtonClickedHandle(self):
         sender = self.sender()
 
@@ -136,6 +135,16 @@ class Servers_Widget(QWidget, QThread):
 
     def ServerUpdateUiData(self, data):
         self.Servers_Link_Num.setText(str(data))
+
+    def ServerUpdateUiShow(self):
+        self.Servers_Ip_Addr.setText(str(socket.gethostbyname(self.UseSoc.host)))
+        self.Servers_Port_Num.setText(str(self.UseSoc.port))
+        if self.UseSoc.UseProtocol == Protocol.TCP:
+            self.Servers_LinkNum.setText('连接次数')
+            self.Servers_Link_Num.setText(str(self.UseSoc.AccpetThread.Client_Link_Num))
+        elif self.UseSoc.UseProtocol == Protocol.UDP:
+            self.Servers_LinkNum.setText('通信次数')
+            self.Servers_Link_Num.setText(str(self.UseSoc.UDPThread.Client_Link_Num))
 
 class Servers_MainUI(QMainWindow):
     def __init__(self):
