@@ -1,9 +1,10 @@
-import socket
+import socket, threading, time
 from PyQt5.QtWidgets import (QWidget, QMenu, QMainWindow, QAction, QTextEdit,QGridLayout, QFileDialog,
                              QPushButton, QLabel, QRadioButton, QComboBox, QLineEdit, QMessageBox)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QRect, QSize, pyqtSignal, QThread
 import matplotlib
+from queue import Queue
 
 #以下为自定义模块
 import ServersSystem
@@ -16,14 +17,53 @@ from ServersSocket import Protocol
 matplotlib.rcParams['font.sans-serif'] = ['SimHei']  # 解决坐标轴中文显示问题
 matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号不显示的问题
 
+class Servers_UiUpdateWidgetMsg_Thread(threading.Thread):  # 继承父类threading.Thread
+    def __init__(self, Widget):
+        super().__init__()
+        self.UseWidget = Widget
+        self.UseQueue = Widget.UseQueue
+        self.UseLog = Widget.UseLog
+
+    def run(self):
+        while True:
+            # 阻塞程序，时刻监听接收消息
+            try:
+                msg = self.UseQueue.get()
+                self.UseWidget.ServerstextEdit.append(time.strftime("[%Y-%m-%d %H:%M:%S ]", time.localtime()) + msg)
+                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level6, "Servers_UiUpdateMsg_Thread Recv Msg:", msg)
+            except Exception as e:
+                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Servers_UiUpdateMsg_Thread Error:", e)
+
+class Servers_UiUpdateWidgetData_Thread(threading.Thread):  # 继承父类threading.Thread
+    def __init__(self, threadID, name, counter, Widget):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.counter = counter
+        self.UseGlobalVal = Widget.UseGlobalVal
+        self.Widget = Widget
+
+    def run(self):  # 把要执行的代码写到run函数里面 线程在创建后会直接运行run函数
+        while True:
+            time.sleep(1)
+            SendNum = ServersSystem.Servers_GlobalManager.Global_Get(self.UseGlobalVal, 'SocketSendDataNum')
+            RecvNum = ServersSystem.Servers_GlobalManager.Global_Get(self.UseGlobalVal, 'SocketRecvDataNum')
+            self.Widget.Servers_CommunicationData_Num.setText('发送数据量：'+ str(SendNum)+ ' Byte --- 接收数据量：'+ str(RecvNum)+ ' Byte')
 
 class Servers_Widget(QWidget, QThread):
-    def __init__(self, UseLog, Soc):
+    def __init__(self, UseLog, Soc, GlobalVal, Queue):
         super().__init__()
         self.UseLog = UseLog
         self.UseSoc = Soc
-
+        self.UseGlobalVal = GlobalVal
+        self.UseQueue = Queue
         self.Servers_Widget_Init()
+
+        try:
+            Servers_UiUpdateWidgetData_Thread(1, "ServersDataUpdateThread", 2, self).start()
+            Servers_UiUpdateWidgetMsg_Thread(self).start()
+        except Exception as e:
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "Widget Create and start Thread Error:", e)
 
     def Servers_Widget_Init(self):
         self.ServersUI_Setup()
@@ -49,6 +89,7 @@ class Servers_Widget(QWidget, QThread):
         self.Servers_LinkNum = QLabel()
         self.Servers_Link_Num = QLabel()
         self.Servers_Link_Num.setGeometry(QRect(10, 20, 100, 20))
+        self.Servers_CommunicationData_Num = QLabel()
         self.ServerUpdateUiShow()
 
         #行编辑和文本编辑框
@@ -77,9 +118,10 @@ class Servers_Widget(QWidget, QThread):
         X_Index = 1;Y_Index = 0 #X:行下标,Y:列下标
         Y_ServersComboBoxStep = 1
         X_ServersLabelOffset = 1;X_ServersLabelStep = 1;Y_ServersLabelStep = 1
-        X_ServersPushButtonStep = 1;Y_ServersPushButtonOffset = 3;
-        X_ServersEditOffset = 1;X_ServersEditStep = 1;Y_ServersEditOffset = 2;
+        X_ServersPushButtonStep = 1;Y_ServersPushButtonOffset = 3
+        X_ServersEditOffset = 1;X_ServersEditStep = 1;Y_ServersEditOffset = 2
         Y_ServersRadioButtontOffset = 4;X_ServersRadioButtonStep = 2
+        Y_ServersCommunicationDataNumOffset = 2
 
         grid.addWidget(self.ServersComboBox, X_Index, Y_Index)
         grid.addWidget(self.Servers_ComboBox, X_Index, Y_Index + Y_ServersComboBoxStep)
@@ -96,13 +138,14 @@ class Servers_Widget(QWidget, QThread):
         grid.addWidget(self.ServersLineEdit, X_Index + X_ServersEditOffset, Y_Index + Y_ServersEditOffset)
         grid.addWidget(self.ServerstextEdit, X_Index + X_ServersEditOffset + X_ServersEditStep, Y_Index + Y_ServersEditOffset)
 
-        grid.addWidget(self.ServersSwitchProtocolQPushButton, X_Index , Y_Index + Y_ServersPushButtonOffset)
         grid.addWidget(self.ServersClearInputQPushButton, X_Index + X_ServersPushButtonStep, Y_Index + Y_ServersPushButtonOffset)
         grid.addWidget(self.ServersClearOutputQPushButton, X_Index + 2*X_ServersPushButtonStep, Y_Index + Y_ServersPushButtonOffset)
+        grid.addWidget(self.ServersSwitchProtocolQPushButton, X_Index + 3*X_ServersPushButtonStep, Y_Index + Y_ServersPushButtonOffset)
 
         grid.addWidget(self.ServersHexQRadioButton, X_Index, Y_Index + Y_ServersRadioButtontOffset)
         grid.addWidget(self.ServersDexQRadioButton, X_Index + X_ServersRadioButtonStep, Y_Index + Y_ServersRadioButtontOffset)
 
+        grid.addWidget(self.Servers_CommunicationData_Num, X_Index, Y_Index + Y_ServersCommunicationDataNumOffset)
         self.setLayout(grid)
 
     def ServersUI_SignalInit(self):
@@ -128,17 +171,19 @@ class Servers_Widget(QWidget, QThread):
         sender = self.sender()
 
         if sender.text() == "Hex":
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3,"Hex")
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Hex")
 
         if sender.text() == "Dex":
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3,"Dex")
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Dex")
 
     def ServerUpdateUiData(self, data):
         self.Servers_Link_Num.setText(str(data))
 
     def ServerUpdateUiShow(self):
         self.Servers_Ip_Addr.setText(str(socket.gethostbyname(self.UseSoc.host)))
+        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level2, socket.gethostbyname_ex(self.UseSoc.host))
         self.Servers_Port_Num.setText(str(self.UseSoc.port))
+        self.Servers_CommunicationData_Num.setText('发送数据量：'+ str(0)+ ' Byte --- 接收数据量：'+ str(0)+ ' Byte')
         if self.UseSoc.UseProtocol == Protocol.TCP:
             self.Servers_LinkNum.setText('连接次数')
             self.Servers_Link_Num.setText(str(self.UseSoc.AccpetThread.Client_Link_Num))
@@ -150,8 +195,10 @@ class Servers_MainUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.UseLog = ServersSystem.Servers_Log()
-        self.UseSoc = ServersSocket.Servers_Socket(self.UseLog)
-        self.UseWidget = Servers_Widget(self.UseLog, self.UseSoc)
+        self.UseGlobalVal = ServersSystem.Servers_GlobalManager()  # 初始化参数
+        self.UseQueue = Queue()
+        self.UseSoc = ServersSocket.Servers_Socket(self.UseLog, self.UseGlobalVal, self.UseQueue)
+        self.UseWidget = Servers_Widget(self.UseLog, self.UseSoc, self.UseGlobalVal, self.UseQueue)
         self.Servers_MainUI_Init()
 
     def Servers_MainUI_Init(self):

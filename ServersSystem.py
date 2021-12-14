@@ -81,7 +81,7 @@ class Servers_Log():
 class Servers_GlobalManager():
     def __init__(self):
         global GlobalVal_dict
-        GlobalVal_dict = { }
+        GlobalVal_dict = {'SocketSendDataNum':0, 'SocketRecvDataNum':0}
 
     def Global_Set(self, Key, Value):
         GlobalVal_dict[Key] = Value
