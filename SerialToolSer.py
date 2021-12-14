@@ -71,7 +71,7 @@ class Serial_Tool_Ser(Serial):
                         Wait_Count = Wait_Count + 1
                         if(Wait_Count > 10):
                             self.UseLog.Log_Output(LogModule.SerModule, LogLevel.Level3, "PaintWithAxis not use UpdateData")
-                            break;
+                            break
                     System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_UpdateData', ReadString)
                     System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_UpdateData_Flag', True)
 

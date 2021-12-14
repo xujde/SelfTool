@@ -535,6 +535,7 @@ class Serial_Tool_Widget(QWidget):
         self.Data_Bits = ['5', '6', '7', '8']
         self.Stop_Bits = ['1', '1.5', '2']
         self.Parity_Bits = ['None', 'Odd', 'Even', 'Mark', 'Space']
+        self.PaintUpdateIndex_List = ['0', '1', '2', '3', '4']
         self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level8, "list", self.port_list)
 
         self.Ui_SetUp()
@@ -552,6 +553,7 @@ class Serial_Tool_Widget(QWidget):
         self.ParitycomboBox = QLabel('奇偶校验')
         self.SendtextEdit = QLabel('数据输入框')
         self.RecvtextEdit = QLabel('数据显示框')
+        self.PaintUpdateIndexcomboBox = QLabel('绘图数据下标')
 
         self.Sendtext_Edit = QLineEdit()#QTextEdit()
         self.Recvtext_Edit = QTextEdit()
@@ -561,7 +563,8 @@ class Serial_Tool_Widget(QWidget):
         self.SendButton = QPushButton("发送数据", self)
         self.ClearSendButton = QPushButton("清空发送框", self)
         self.ClearRecvButton = QPushButton("清空接收框", self)
-        self.refreshPortButton = QPushButton("刷新端口", self)
+        self.RefreshPortButton = QPushButton("刷新端口", self)
+        self.RefreshPaintUpdateIndexButton = QPushButton("刷新绘图数据下标", self)
         self.DexButton = QRadioButton('Dex', self)
         self.HexButton = QRadioButton('Hex', self)
         self.DexButton.setChecked(True)
@@ -571,7 +574,8 @@ class Serial_Tool_Widget(QWidget):
         self.SendButton.clicked.connect(self.PushButtonClickedHandle)
         self.ClearSendButton.clicked.connect(self.PushButtonClickedHandle)
         self.ClearRecvButton.clicked.connect(self.PushButtonClickedHandle)
-        self.refreshPortButton.clicked.connect(self.PushButtonClickedHandle)
+        self.RefreshPortButton.clicked.connect(self.PushButtonClickedHandle)
+        self.RefreshPaintUpdateIndexButton.clicked.connect(self.PushButtonClickedHandle)
 
         self.DexButton.toggled.connect(self.RadioButtonClickedHandle)
         self.HexButton.toggled.connect(self.RadioButtonClickedHandle)
@@ -598,11 +602,17 @@ class Serial_Tool_Widget(QWidget):
         self.Parity_comboBox = QComboBox(self)
         self.Parity_comboBox.addItems(self.Parity_Bits)
 
+        self.PaintUpdateIndex_comboBox = QComboBox(self)
+        self.PaintUpdateIndex_comboBox.addItems(self.PaintUpdateIndex_List)
+        PaintUpdateIndex_comboBox_DefaultIndex = self.PaintUpdateIndex_List.index(str(PaintWithAxis_UpdateData_Index + 1))
+        self.PaintUpdateIndex_comboBox.setCurrentIndex(PaintUpdateIndex_comboBox_DefaultIndex)  # 设置默认值
+
         self.Port_comboBox.setMinimumSize(QSize(100, 20))
         self.Baud_comboBox.setMinimumSize(QSize(100, 20))
         self.Data_comboBox.setMinimumSize(QSize(100, 20))
         self.Stop_comboBox.setMinimumSize(QSize(100, 20))
         self.Parity_comboBox.setMinimumSize(QSize(100, 20))
+        self.PaintUpdateIndex_comboBox.setMinimumSize(QSize(100, 20))
 
     def Ui_Layout(self):
         grid = QGridLayout()
@@ -630,6 +640,8 @@ class Serial_Tool_Widget(QWidget):
         grid.addWidget(self.Stop_comboBox, X_Index + 3 * X_BoxStep, Y_Index + Y_BoxStep)
         grid.addWidget(self.ParitycomboBox, X_Index + 4 * X_BoxStep, Y_Index)
         grid.addWidget(self.Parity_comboBox, X_Index + 4 * X_BoxStep, Y_Index + Y_BoxStep)
+        grid.addWidget(self.PaintUpdateIndexcomboBox, X_Index + 5 * X_BoxStep, Y_Index)
+        grid.addWidget(self.PaintUpdateIndex_comboBox, X_Index + 5 * X_BoxStep, Y_Index + Y_BoxStep)
 
         grid.addWidget(self.DexButton, X_Index, Y_Index + Y_TextStep)
         grid.addWidget(self.HexButton, X_Index, Y_Index + 2 * Y_TextStep)
@@ -644,7 +656,8 @@ class Serial_Tool_Widget(QWidget):
         grid.addWidget(self.SendButton, X_Index + 2 * X_ButtonStep, Y_Index + Y_ButtonStep)
         grid.addWidget(self.ClearSendButton, X_Index + 3 * X_ButtonStep, Y_Index + Y_ButtonStep)
         grid.addWidget(self.ClearRecvButton, X_Index + 4 * X_ButtonStep, Y_Index + Y_ButtonStep)
-        grid.addWidget(self.refreshPortButton, X_Index + 5 * X_ButtonStep, Y_Index + Y_ButtonStep)
+        grid.addWidget(self.RefreshPortButton, X_Index + 5 * X_ButtonStep, Y_Index + Y_ButtonStep)
+        grid.addWidget(self.RefreshPaintUpdateIndexButton, X_Index + 6 * X_ButtonStep, Y_Index + Y_ButtonStep)
 
         self.setLayout(grid)
 
@@ -707,6 +720,15 @@ class Serial_Tool_Widget(QWidget):
                 self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, type(self.port_list[i]))
             self.Port_comboBox.clear()
             self.Port_comboBox.addItems(self.port_list)
+
+        if sender.text() == "刷新绘图数据下标":
+            global PaintWithAxis_UpdateData_Index
+            Index = int(self.PaintUpdateIndex_comboBox.currentText())
+            if Index != 0:
+                PaintWithAxis_UpdateData_Index = Index - 1
+            else:
+                PaintWithAxis_UpdateData_Index = 0
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "绘图下标更新为：", PaintWithAxis_UpdateData_Index)
 
     def RadioButtonClickedHandle(self):
         sender = self.sender()
