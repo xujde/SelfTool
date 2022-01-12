@@ -1,6 +1,6 @@
 import time, threading, random
 from PyQt5.QtWidgets import (QWidget, QPushButton, QMainWindow, QAction, QTextEdit, QLineEdit,
-                             QGridLayout, QFileDialog, QLabel, QRadioButton, QMenu, QGroupBox,
+                             QGridLayout, QFileDialog, QLabel, QRadioButton, QMenu, QGroupBox, QScrollBar, QAbstractSlider,
                              QListWidget, QCheckBox, QListWidgetItem, QDesktopWidget, QComboBox, QMessageBox)
 from PyQt5.QtGui import QIcon, QPainter, QFont, QColor, QPen, QBrush, QPixmap
 from PyQt5.QtCore import Qt, QSize, QRect, QTimer, pyqtSignal, QThread, QPoint, QMetaObject, QCoreApplication
@@ -21,143 +21,13 @@ from System import LogType
 matplotlib.rcParams['font.sans-serif'] = ['SimHei']  # 解决坐标轴中文显示问题
 matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号不显示的问题
 
-oneself = False  # 标志为模块自己产生随机数绘图
+PaintWithAxis_CacheData_Length = 10000 # 缓存绘图数据数量
+PaintWithAxis_SlideShowData_Step = 10 # 滚动条移动一步，更新绘图数据个数
+PaintWithAxis_ShowData_Length = 200 #默认显示绘图数据点个数
 PaintWithAxis_UpdateData_separator = ','
 PaintWithAxis_UpdateData_Index = 1
-
-
-class Serial_Tool_PaintThread(QThread):
-    signal = pyqtSignal() #信号
-
-    def __init__(self,parent=None):
-        super(Serial_Tool_PaintThread,self).__init__(parent)
-
-    def start_timer(self):
-       self.start() #启动线程
-
-    def run(self):
-        while True:
-            self.signal.emit() #发送信号
-            time.sleep(0.1)
-
-class Serial_Tool_PaintUi(QWidget):
-    def SetupUi(self, Form):
-        self.Title = QLabel(Form)
-        self.Title.setGeometry(QRect(10, 10, 351, 31))
-        self.Title.setAlignment(Qt.AlignCenter)
-        self.Title.setObjectName("Title")
-
-        self.CurValue = QLabel(Form)
-        self.CurValue.setGeometry(QRect(430, 10, 91, 31))
-        self.CurValue.setAlignment(Qt.AlignRight | Qt.AlignTrailing | Qt.AlignVCenter)
-        self.CurValue_Show = QLabel(Form)
-        self.CurValue_Show.setGeometry(QRect(520, 10, 111, 31))
-        self.CurValue_Show.setText("")
-
-        self.Show_Paint = QLabel(Form)
-        self.Show_Paint.setGeometry(QRect(10, 50, 950, 400))
-        self.Show_Paint.setText("")
-
-        self.start_Button = QPushButton(Form)
-        self.start_Button.setGeometry(QRect(680, 5, 121, 41))
-
-        self.stop_Button = QPushButton(Form)
-        self.stop_Button.setGeometry(QRect(800, 5, 121, 41))
-
-        self.retranslateUi(Form)
-        QMetaObject.connectSlotsByName(Form)
-
-    def retranslateUi(self, Form):
-        _translate = QCoreApplication.translate
-        Form.setWindowTitle(_translate("Form", "Form"))
-        self.CurValue.setText(_translate("Form", "测量值当前值: "))
-        self.Title.setText(_translate("Form", "测量值实时反馈折线图"))
-        self.start_Button.setText(_translate("Form", "启动"))
-        self.stop_Button.setText(_translate("Form", "停止"))
-
-class Serial_Tool_Paint(QWidget):
-    def __init__(self, parent=None):
-        super(Serial_Tool_Paint, self).__init__(parent)
-        self.Paint_Ui = Serial_Tool_PaintUi()
-        self.Paint_Ui.SetupUi(self) #初始化ui
-
-        self.init() #初始化变量
-        self.Signal_Func() #信号槽链接函数
-
-        if oneself == True:#如果是模块自己运行则启动多线程发送随机数
-            self.PaintThread = Serial_Tool_PaintThread() #多线程实例化
-            self.PaintThread.start_timer() #启动线程
-            self.PaintThread.signal.connect(self.Create_Random_Num) #线程启动槽函数
-
-    #链接信号槽函数
-    def Signal_Func(self):
-        self.Paint_Ui.start_Button.clicked.connect(self.Start_Handle) #启动按钮单击信号
-        self.Paint_Ui.stop_Button.clicked.connect(self.Stop_Handle)  #停止按钮单击信号
-
-    #生成随机数
-    def Create_Random_Num(self):
-        num = random.uniform(0, 5) # 生成随机数，浮点类型
-        num1 = round(num, 2) # 控制随机数的精度，保留两位小数
-        self.Change_PointList(num1)
-
-    #初始化变量函数
-    def init(self):
-        self.UsePaint = QPainter()  # 绘制类实例
-        self.Picture = QPixmap(950,400) #设置图片大小
-        self.PointList = [ [0, 0] ] #保存绘制点位列表
-        self.X_Part = 100 #X轴分成多少等份
-        self.Y_Part = 5 #Y轴分成多少等份
-
-        self.X_Part1 = 950/self.X_Part #每一等份的宽度
-        self.Y_Part1 = 400/self.Y_Part #每一等份的高度
-
-        self.Run_Flag = False #运行标志位
-
-    #启动按钮槽函数，置位运行标志
-    def Start_Handle(self):
-        self.Run_Flag = True
-
-    #停止按钮槽函数，复位运行标志
-    def Stop_Handle(self):
-        self.Run_Flag = False
-
-    #修改列表点位
-    def Change_PointList(self, value):
-        if self.Run_Flag == True:
-            self.Paint_Ui.CurValue_Show.setText(str(value)) #设置标签显示当前值
-            self.Begin_X = 0    #初始化起点
-            self.Begin_Y = 400  #初始化起点
-            if len(self.PointList) >= (self.X_Part+1): #X轴950化成95等份
-                self.PointList = self.PointList[-self.X_Part: ] #截取列表保留后95位
-                for i in self.PointList: #遍历列表，每个点位X轴左移一位(即减小1)
-                    i[0] -= self.X_Part1
-            x = self.PointList[-1][0] + self.X_Part1 #新增点位的X轴
-            y = value                        #新增点位的Y轴
-            self.PointList.append([x, y]) #将新增的点位添加到列表
-
-            self.Picture.fill(Qt.white)  # 设置为白底色
-            self.ReadPonitDraw()  # 读取列表点位进行绘制
-
-    #读取列表点位进行绘制
-    def ReadPonitDraw(self):
-        #解析列表中点位进行移位计算
-        for PointList in self.PointList:
-            self.End_X = PointList[0]        # X轴终点位置
-            # 输入的数值为0-5.画布高度为400，画布左上角为0，0。改为左下角为0，0
-            self.End_Y = 400 - PointList[1] * self.Y_Part1
-            self.Uptate_Paint() #调用绘制图形
-
-        self.Paint_Ui.Show_Paint.setPixmap(self.Picture) # 将图像显示在标签上
-
-    #绘制函数
-    def Uptate_Paint(self):
-        self.UsePaint.begin(self.Picture) # 开始在目标设备上面绘制
-        self.UsePaint.setPen(QPen(QColor("black"), 1))# 设置画笔颜色，粗细
-        # 绘制一条指定了端点坐标的线，绘制从（self.beg_x,self.beg_y）到（self.end_x,self.end_y）的直线
-        self.UsePaint.drawLine(QPoint(self.Begin_X, self.Begin_Y),QPoint(self.End_X, self.End_Y) )
-        self.UsePaint.end() #结束在目标设备上面绘制
-        self.Begin_X = self.End_X #改变结束后的坐标
-        self.Begin_Y = self.End_Y
+PaintWithAxis_Zooom_Range = 10 #坐标轴刻度缩放幅度
+PaintWithAxis_Display_The_Latest_Data = True #是否显示最新数据
 
 class Serial_Tool_PaintWithAxisThread(QThread):
     signal = pyqtSignal(str) #信号
@@ -188,12 +58,15 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         self.UseFigure = Figure(figsize=(width, height), dpi=70)
         super(Serial_Tool_PaintWithAxis, self).__init__(self.UseFigure)
         self.Axis = self.UseFigure.add_subplot(111)  # 111表示1行1列，第一张曲线图
-        self.Data_Num = 200     # X轴最大值,要大于1（即X轴长度）
+        self.ShowDataNum = PaintWithAxis_ShowData_Length     # X轴最大值,要大于1（即X轴长度）
+        self.CacheDataNum = PaintWithAxis_CacheData_Length
         self.YData_Max = 120    # Y轴最大值
-        self.Updata_Count = 0  # 累计更新Updata_Count个数据后更新绘图，必须小于self.Data_Num
+        self.Updata_Count = 0  # 累计更新Updata_Count个数据后更新绘图，必须小于self.ShowDataNum
         self.Sign_Num = 2
         self.HLine = [self.Axis.axhline(0, visible=True) for i in range(self.Sign_Num)]#平行于X轴
         self.VLine = [self.Axis.axvline(0, visible=True) for i in range(self.Sign_Num)]#平行于Y轴
+        self.Update_Y_Data = [0] * self.ShowDataNum
+        self.Cache_Y_Data = [0] * self.CacheDataNum
 
     def Add_Line(self, x_data, y_data, y2_data=None):
         self.Line = Line2D(x_data, y_data)  # 绘制2D折线图
@@ -210,7 +83,7 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         # 设置xy轴最大最小值,找到x_data, y_data最大最小值
         self.Axis.set_xlim(np.min(x_data), np.max(x_data) + 2, auto = True)
         self.Axis.set_ylim(np.min(y_data), np.max(y_data) + 2, auto = True)  # y轴稍微多一点，会好看一点
-        self.XData_Max = np.min(x_data)
+        self.XData_Max = np.max(x_data)
         self.YData_Max = np.max(y_data)
 
         self.Axis.set_xlabel('x坐标')  # 设置坐标名称
@@ -231,20 +104,24 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         # self.Line2.set_color('red')  # 设置线条颜色
         # self.Axis.legend([self.Line, self.Line2], ['sinx', 'cosx'])  # 添加图例
         #
-        self.Axis2 = self.Axis.twinx()
-        self.Axis2.set_ylim(np.min(y_data), np.max(y_data) + 2)
-        self.Axis2.set_ylabel('y2坐标')
+        # self.Axis2 = self.Axis.twinx()
+        # self.Axis2.set_ylim(np.min(y_data), np.max(y_data) + 2)
+        # self.Axis2.set_ylabel('y2坐标')
 
     def Change_Axis_XYlim(self, X_Data, Y_Data):
         self.Axis.set_xlim(np.min(X_Data), np.max(X_Data) + 2, auto=True)
         self.Axis.set_ylim(np.min(Y_Data), np.max(Y_Data) + 2, auto=True)  # y轴稍微多一点，会好看一点
 
-        self.XData_Max = np.min(X_Data)
+        self.XData_Max = np.max(X_Data)
         self.YData_Max = np.max(Y_Data)
 
-        self.Axis2 = self.Axis.twinx()
-        self.Axis2.set_ylim(np.min(Y_Data), np.max(Y_Data) + 2)
-        self.Axis2.set_ylabel('y2坐标')
+        # self.Axis2 = self.Axis.twinx()
+        # self.Axis2.set_ylim(np.min(Y_Data), np.max(Y_Data) + 2)
+        # self.Axis2.set_ylabel('y2坐标')
+
+    def Change_Axis_Xlim(self, X_Data):
+        self.Axis.set_xlim(np.min(X_Data), np.max(X_Data) + 2, auto=True)
+        self.XData_Max = np.max(X_Data)
 
 class Serial_Tool_PaintWithAxisUi(QMainWindow):
     def __init__(self, Log, GlobalVal):
@@ -257,6 +134,8 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         Wide = 1000;High = 800
         self.Start_X = 10;self.Start_Y = 10
         self.resize(Wide, High)
+        self.HorizontalScrollBarValue = 0
+        self.VerticalScrollBarValue = 0
 
         # 创建一个groupbox, 用来画动态曲线
         self.groupBox = QGroupBox(self)
@@ -264,152 +143,150 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
 
         self.LineFigureLayout = QGridLayout(self.groupBox)
 
-        self.Button_Init()
-
-        self.LineEdit_Init()
+        self.Button_Setup()
+        self.LineEdit_Setup()
+        self.ScrollBar_Setup()
+        self.Ui_Layout()
 
         self.Load_DynamicLine()  # 加载动态曲线
 
         self.setLayout(self.LineFigureLayout)
 
-        if oneself == True:  # 如果是模块自己运行则启动多线程发送随机数
-            # 创建定时器，使曲线图动态更新
-            self.UseTimer = QTimer()
-            self.UseTimer.start(10)
-            self.TimeStamp = time.time()
-            self.UseTimer.timeout.connect(self.UpdateData_OneSelf)
-        else:
-            System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_Start_Flag', True)
-            self.TimeStamp = time.time()
-            self.PaintWithAxisThread = Serial_Tool_PaintWithAxisThread(self.UseGlobalVal)
-            self.PaintWithAxisThread.signal.connect(self.UpdateData_UseSignal)
-            self.PaintWithAxisThread.start()
+        System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_Start_Flag', True)
+        self.TimeStamp = time.time()
+        self.PaintWithAxisThread = Serial_Tool_PaintWithAxisThread(self.UseGlobalVal)
+        self.PaintWithAxisThread.signal.connect(self.UpdateData_UseSignal)
+        self.PaintWithAxisThread.start()
 
     def Load_DynamicLine(self):
         self.LineFigure = Serial_Tool_PaintWithAxis()
 
-        self.LineFigure.UseFigure.canvas.mpl_connect('button_press_event', self.Mouse_pressEvent)  # 鼠标事件处理
+        self.LineFigure.UseFigure.canvas.mpl_connect('button_press_event', self.Mouse_PressEvent)  # 鼠标点击事件处理
+        self.LineFigure.UseFigure.canvas.mpl_connect('scroll_event', self.Mouse_ScrollEvent)  # 鼠标滚轮事件处理
 
         self.LineFigureLayout.addWidget(self.LineFigure, 0, 0, 1, 5)
 
-        if oneself == True:  # 如果是模块自己运行则启动多线程发送随机数
-            # 准备数据，绘制曲线
-            x_data = np.arange(-4, 4, 0.02)
-            y_data = np.sin(x_data)
-            # y2_data = np.cos(x_data)
-            # self.LineFigure.Add_Line(x_data, y_data, y2_data)
-        else:
-            x_data = np.arange(0, self.LineFigure.Data_Num, 1)
-            y_data = [self.LineFigure.YData_Max for i in range(self.LineFigure.Data_Num)]
-            for i in range(1, self.LineFigure.Data_Num):
-                y_data[i] = random.randint(1, self.LineFigure.YData_Max)
+        x_data = np.arange(PaintWithAxis_CacheData_Length -  PaintWithAxis_ShowData_Length, PaintWithAxis_CacheData_Length, 1)#np.arange(0, PaintWithAxis_ShowData_Length, 1)
+        y_data = [self.LineFigure.YData_Max for i in range(PaintWithAxis_ShowData_Length)]
+        for i in range(1, PaintWithAxis_ShowData_Length):
+            y_data[i] = random.randint(1, self.LineFigure.YData_Max)
 
-        self.LineFigure.Update_Y_Data = [0]*self.LineFigure.Data_Num
-        if(self.LineFigure.Updata_Count > self.LineFigure.Data_Num):
-            self.LineFigure.Updata_Count = self.LineFigure.Data_Num
+        if(self.LineFigure.Updata_Count > PaintWithAxis_ShowData_Length):
+            self.LineFigure.Updata_Count = PaintWithAxis_ShowData_Length
         elif (self.LineFigure.Updata_Count < 1):
             self.LineFigure.Updata_Count = 1
 
         self.LineFigure.Add_Line(x_data, y_data)
 
-    def Button_Init(self):
+    def Button_Setup(self):
         self.StartButton = QPushButton('开始', self)
         self.StopButton = QPushButton("停止", self)
         self.SaveButton = QPushButton("保存", self)
         self.StartButton.clicked.connect(self.PushButtonClickedHandle)
         self.StopButton.clicked.connect(self.PushButtonClickedHandle)
         self.SaveButton.clicked.connect(self.PushButtonClickedHandle)
-        self.LineFigureLayout.addWidget(self.StartButton, 1, 0)
-        self.LineFigureLayout.addWidget(self.StopButton, 1, 1)
-        self.LineFigureLayout.addWidget(self.SaveButton, 1, 2)
 
-    def LineEdit_Init(self):
-        X1LineEdit = QLabel('X1')
-        Y1LineEdit = QLabel('Y1')
-        X2LineEdit = QLabel('X2')
-        Y2LineEdit = QLabel('Y2')
-        XDiffLineEdit = QLabel('X-Diff')
-        YDiffLineEdit = QLabel('Y-Diff')
+    def LineEdit_Setup(self):
+        self.X1LineEdit = QLabel('X1')
+        self.Y1LineEdit = QLabel('Y1')
+        self.X2LineEdit = QLabel('X2')
+        self.Y2LineEdit = QLabel('Y2')
+        self.XDiffLineEdit = QLabel('X-Diff')
+        self.YDiffLineEdit = QLabel('Y-Diff')
 
-        self.X1LineEdit = QLineEdit()
-        self.Y1LineEdit = QLineEdit()
-        self.X2LineEdit = QLineEdit()
-        self.Y2LineEdit = QLineEdit()
-        self.XDiffLineEdit = QLineEdit()
-        self.YDiffLineEdit = QLineEdit()
+        self.X1_LineEdit = QLineEdit()
+        self.Y1_LineEdit = QLineEdit()
+        self.X2_LineEdit = QLineEdit()
+        self.Y2_LineEdit = QLineEdit()
+        self.XDiff_LineEdit = QLineEdit()
+        self.YDiff_LineEdit = QLineEdit()
 
         self.XY1Button = QRadioButton('XY1', self)
         self.XY2Button = QRadioButton('XY2', self)
         self.XY1Button.setChecked(True)
 
-        self.LineFigureLayout.addWidget(self.XY1Button, 2, 0)
-        self.LineFigureLayout.addWidget(X1LineEdit, 2, 1)
-        self.LineFigureLayout.addWidget(self.X1LineEdit, 2, 2)
-        self.LineFigureLayout.addWidget(Y1LineEdit, 2, 3)
-        self.LineFigureLayout.addWidget(self.Y1LineEdit, 2, 4)
-        self.LineFigureLayout.addWidget(self.XY2Button, 3, 0)
-        self.LineFigureLayout.addWidget(X2LineEdit, 3, 1)
-        self.LineFigureLayout.addWidget(self.X2LineEdit, 3, 2)
-        self.LineFigureLayout.addWidget(Y2LineEdit, 3, 3)
-        self.LineFigureLayout.addWidget(self.Y2LineEdit, 3, 4)
-        self.LineFigureLayout.addWidget(XDiffLineEdit, 4, 1)
-        self.LineFigureLayout.addWidget(self.XDiffLineEdit, 4, 2)
-        self.LineFigureLayout.addWidget(YDiffLineEdit, 4, 3)
-        self.LineFigureLayout.addWidget(self.YDiffLineEdit, 4, 4)
-
         self.XY1Button.toggled.connect(self.XYButton)
         self.XY2Button.toggled.connect(self.XYButton)
 
-        self.X1LineEdit.setText(str(0.0))
-        self.Y1LineEdit.setText(str(0.0))
-        self.X2LineEdit.setText(str(0.0))
-        self.Y2LineEdit.setText(str(0.0))
-        self.XDiffLineEdit.setText(str(0.0))
-        self.YDiffLineEdit.setText(str(0.0))
+        self.X1_LineEdit.setText(str(0.0))
+        self.Y1_LineEdit.setText(str(0.0))
+        self.X2_LineEdit.setText(str(0.0))
+        self.Y2_LineEdit.setText(str(0.0))
+        self.XDiff_LineEdit.setText(str(0.0))
+        self.YDiff_LineEdit.setText(str(0.0))
 
-    def UpdateData_OneSelf(self):
-        dt = time.time() - self.TimeStamp
-        x_data = np.arange(-4, 4, 0.02)
-        z_data = np.sin(x_data + dt)  # 准备动态数据
+    def ScrollBar_Setup(self):
+        self.HorizontalScrollBar = QScrollBar(orientation=True, maximum = PaintWithAxis_CacheData_Length/PaintWithAxis_SlideShowData_Step)#, pagestep = 10, singlestep = 5, value = 0)
+        self.HorizontalScrollBar.actionTriggered.connect(self.ScrollBarSliderMovedHandle)
+        # self.HorizontalScrollBar.sliderMoved.connect(self.ScrollBarSliderMovedHandle)
+        self.HorizontalScrollBar.setValue(PaintWithAxis_CacheData_Length/PaintWithAxis_SlideShowData_Step)
+        self.VerticalScrollBar = QScrollBar(maximum = 1)
+        self.VerticalScrollBar.actionTriggered.connect(self.ScrollBarSliderMovedHandle)
+        self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
+        self.VerticalScrollBarValue = self.VerticalScrollBar.value()
 
-        h_data = np.cos(x_data + dt)
+    def Ui_Layout(self):
+        self.LineFigureLayout.addWidget(self.StartButton, 1, 0)
+        self.LineFigureLayout.addWidget(self.StopButton, 1, 1)
+        self.LineFigureLayout.addWidget(self.SaveButton, 1, 2)
 
-        self.LineFigure.Line.set_ydata(z_data)  # 更新数据
-        # self.LineFigure.Line2.set_ydata(h_data)
-        self.LineFigure.draw()  # 重新画图
+        self.LineFigureLayout.addWidget(self.HorizontalScrollBar, 1, 4)
+        self.LineFigureLayout.addWidget(self.VerticalScrollBar, 0, 6)  # 坐标轴从(0,0)开始，长度为5
+
+        self.LineFigureLayout.addWidget(self.XY1Button, 2, 0)
+        self.LineFigureLayout.addWidget(self.X1LineEdit, 2, 1)
+        self.LineFigureLayout.addWidget(self.X1_LineEdit, 2, 2)
+        self.LineFigureLayout.addWidget(self.Y1LineEdit, 2, 3)
+        self.LineFigureLayout.addWidget(self.Y1_LineEdit, 2, 4)
+        self.LineFigureLayout.addWidget(self.XY2Button, 3, 0)
+        self.LineFigureLayout.addWidget(self.X2LineEdit, 3, 1)
+        self.LineFigureLayout.addWidget(self.X2_LineEdit, 3, 2)
+        self.LineFigureLayout.addWidget(self.Y2LineEdit, 3, 3)
+        self.LineFigureLayout.addWidget(self.Y2_LineEdit, 3, 4)
+        self.LineFigureLayout.addWidget(self.XDiffLineEdit, 4, 1)
+        self.LineFigureLayout.addWidget(self.XDiff_LineEdit, 4, 2)
+        self.LineFigureLayout.addWidget(self.YDiffLineEdit, 4, 3)
+        self.LineFigureLayout.addWidget(self.YDiff_LineEdit, 4, 4)
 
     def UpdateData_UseSignal(self, New_data):
         y_data = self.Update_Data_Analyse(New_data)
         if len(y_data) > 0:
             self.LineFigure.Updata_Count = len(y_data)
-            for i in range(0, self.LineFigure.Data_Num - self.LineFigure.Updata_Count):
-                self.LineFigure.Update_Y_Data[i] = self.LineFigure.Update_Y_Data[i + self.LineFigure.Updata_Count]
+            # 更新缓存数据
+            for i in range(0, PaintWithAxis_CacheData_Length - self.LineFigure.Updata_Count):
+                self.LineFigure.Cache_Y_Data[i] = self.LineFigure.Cache_Y_Data[i + self.LineFigure.Updata_Count]
             for j in range(0, self.LineFigure.Updata_Count):
-                self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - self.LineFigure.Updata_Count + j] = y_data[j]
-            if(np.max(self.LineFigure.Update_Y_Data) > self.LineFigure.YData_Max):#接收到的数据比坐标轴最大值大时更新坐标轴
-                Update_X_data = np.arange(0, self.LineFigure.Data_Num, 1)
-                self.LineFigure.Change_Axis_XYlim(Update_X_data, self.LineFigure.Update_Y_Data)
-            self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)  # 更新数据
+                self.LineFigure.Cache_Y_Data[PaintWithAxis_CacheData_Length - self.LineFigure.Updata_Count + j] = y_data[j]
+
+            if PaintWithAxis_Display_The_Latest_Data:   #更新显示最新数据
+                Update_Y_Data = [0 for i in range(PaintWithAxis_ShowData_Length)]
+                for k in range(0, PaintWithAxis_ShowData_Length):
+                        self.LineFigure.Update_Y_Data[k] = self.LineFigure.Cache_Y_Data[PaintWithAxis_CacheData_Length - PaintWithAxis_ShowData_Length + k]
+                        Update_Y_Data[k] = self.LineFigure.Update_Y_Data[k]
+                if (np.max(Update_Y_Data) > self.LineFigure.YData_Max):  # 接收到的数据比坐标轴最大值大时更新坐标轴
+                    Update_X_data = np.arange(PaintWithAxis_CacheData_Length - PaintWithAxis_ShowData_Length, PaintWithAxis_CacheData_Length, 1)
+                    self.LineFigure.Change_Axis_XYlim(Update_X_data, Update_Y_Data)
+                self.LineFigure.Line.set_ydata(Update_Y_Data)
+            else: #不显示最新数据，但更新X轴坐标范围
+                x_min, x_max = self.LineFigure.Axis.get_xlim()
+                Update_X_data = np.arange(int(x_min - self.LineFigure.Updata_Count), int(x_max - self.LineFigure.Updata_Count))
+                self.LineFigure.Change_Axis_Xlim(Update_X_data) #只更新X轴坐标范围
+                self.LineFigure.Line.set_xdata(Update_X_data)
+                #Y轴数据需要匹配X轴长度
+                Update_Y_Data = [0 for i in range(len(Update_X_data))]
+                if len(Update_X_data) > len(self.LineFigure.Update_Y_Data):
+                    diff = len(Update_X_data) - len(self.LineFigure.Update_Y_Data)
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "UpdateData_UseSignal diff:", diff, "Update_X_data len:", len(Update_X_data), "Update_Y_Data len:", len(Update_Y_Data), "self.LineFigure.Update_Y_Data len:", len(self.LineFigure.Update_Y_Data))
+                for i in range(len(self.LineFigure.Update_Y_Data)):
+                    Update_Y_Data[diff + i] = self.LineFigure.Update_Y_Data[i]
+                self.LineFigure.Line.set_ydata(Update_Y_Data)
+                self.HorizontalScrollBar.setValue(int(x_max - self.LineFigure.Updata_Count) / PaintWithAxis_SlideShowData_Step) #设置滚动条的值
+                self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "UpdateData_UseSignal x_min:", x_min, " x_max:", x_max)
+
             self.LineFigure.draw()  # 重新画图
 
-        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "y_data len:", len(y_data), "y:", self.LineFigure.Update_Y_Data)
-
-        # x_data = int(time.time() - self.TimeStamp)
-        # if (x_data%self.LineFigure.Updata_Count):
-        #     self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - self.LineFigure.Updata_Count + x_data - 1] = New_data
-        #     # print("no attend", x_data, New_data)
-        # else:
-        #     self.LineFigure.Update_Y_Data[self.LineFigure.Data_Num - 1] = New_data
-        #     if(x_data != 0):
-        #         self.TimeStamp = time.time()
-        #         self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "x:", x_data, "TimeStamp:", int(self.TimeStamp),"New_data:", New_data)
-        #         self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "y:", self.LineFigure.Update_Y_Data)
-        #         self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)  # 更新数据
-        #         self.LineFigure.draw()  # 重新画图
-        #
-        #         #数据往前移
-        #         for i in range(0, self.LineFigure.Data_Num - self.LineFigure.Updata_Count):
-        #             self.LineFigure.Update_Y_Data[i] = self.LineFigure.Update_Y_Data[i + self.LineFigure.Updata_Count]
+        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "UpdateData_UseSignal y_data len:", len(y_data), "y:", self.LineFigure.Update_Y_Data)
 
     def PushButtonClickedHandle(self):
         sender = self.sender()
@@ -433,6 +310,56 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             except Exception as e:
                 self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "Save Picture Error:", e)
 
+    def ScrollBarSliderMovedHandle(self):
+        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "ScrollBarSliderMovedHandle H:", self.HorizontalScrollBar.value(), "V:", self.VerticalScrollBar.value())
+
+        global PaintWithAxis_Display_The_Latest_Data
+
+        # 获取当前坐标轴范围
+        x_min, x_max = self.LineFigure.Axis.get_xlim()
+        y_min, y_max = self.LineFigure.Axis.get_ylim()
+
+        if self.HorizontalScrollBarValue != self.HorizontalScrollBar.value():
+            if x_min >= 0:
+                X_Range = x_max - x_min
+                StartHorIndex = int(x_min)
+            else :
+                X_Range = x_max
+                StartHorIndex = 0
+            HorValueChange = self.HorizontalScrollBar.value() - self.HorizontalScrollBarValue #滚动条变化量
+            StartHorIndex = StartHorIndex + (HorValueChange * PaintWithAxis_SlideShowData_Step)
+
+            if StartHorIndex < 0:
+                StartHorIndex = 0
+            if int(X_Range) > PaintWithAxis_ShowData_Length:
+                X_Range = PaintWithAxis_ShowData_Length #后续优化，修改后X坐标数量和实际显示数量有差异
+            if PaintWithAxis_CacheData_Length < int(StartHorIndex + X_Range):
+                StartHorIndex = PaintWithAxis_CacheData_Length - int(X_Range)
+
+            Update_Y_Data = [0 for i in range(int(X_Range))]
+            try:
+                for i in range(0, int(X_Range)): #获取当前坐标范围内数据
+                    Update_Y_Data[i] = self.LineFigure.Cache_Y_Data[int(StartHorIndex) + i]
+                    self.LineFigure.Update_Y_Data[i] = self.LineFigure.Cache_Y_Data[int(StartHorIndex) + i]
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "ScrollBarSliderMovedHandle StartHorIndex:", StartHorIndex, "x_min x_max:", x_min, x_max, "y_min, y_max:", y_min, y_max, "X_Range:", X_Range)
+            except Exception as e:
+                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "ScrollBarSliderMovedHandle StartHorIndex:", StartHorIndex, "X_Range:", X_Range, "i:", i, len(self.LineFigure.Update_Y_Data), len(self.LineFigure.Cache_Y_Data),"Error:", e)
+
+            Update_X_data = np.arange(int(StartHorIndex), int(StartHorIndex + X_Range))
+
+            self.LineFigure.Change_Axis_Xlim(Update_X_data) #更新X轴坐标
+            self.LineFigure.Line.set_xdata(Update_X_data) #更新折线X轴数据，否则会出现未绘制过的X轴部分出现Y轴数据缺失显示
+            self.LineFigure.Line.set_ydata(Update_Y_Data) #更新折线Y轴数据,长度需要跟X轴数据一致，否则会出现“shape mismatch: objects cannot be broadcast to a single shape”错误
+
+            self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
+
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "ScrollBarSliderMovedHandle Update_Data len:", len(Update_X_data), len(Update_Y_Data))
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level8, "ScrollBarSliderMovedHandle Cache_Y_Data:", self.LineFigure.Cache_Y_Data)
+        elif self.VerticalScrollBarValue != self.VerticalScrollBar.value() :
+            self.VerticalScrollBarValue = self.VerticalScrollBar.value()
+        self.LineFigure.draw()  # 重新画图
+        PaintWithAxis_Display_The_Latest_Data = False #不自动显示最新的数据
+
     def closeEvent(self, event):
         reply = QMessageBox.question(self, 'Message',
                                      "Are you sure to quit?", QMessageBox.Yes |
@@ -449,34 +376,72 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "Change_wide:", Change_wide, ",Change_high:", Change_high)
         self.groupBox.setGeometry(QRect(self.Start_X, self.Start_Y, Change_wide - 2 * self.Start_X, Change_high - 2 * self.Start_Y))
 
-    def Mouse_pressEvent(self, event):
+    def Mouse_PressEvent(self, event):
         self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "event.xdata", event.xdata, "event.ydata", event.ydata, "event.button", event.button)
         if event.button == MouseButton.LEFT:
-            self.LineFigure.HLine[self.Sign_Select - 1].set_ydata(event.ydata)
-            self.LineFigure.HLine[self.Sign_Select - 1].set_visible(True)
-            if self.Sign_Select == 1:
-                self.Y1LineEdit.setText(str(event.ydata))
-            elif self.Sign_Select == 2:
-                self.Y2LineEdit.setText(str(event.ydata))
-
-        if event.button == MouseButton.RIGHT:
             self.LineFigure.VLine[self.Sign_Select - 1].set_xdata(event.xdata)
             self.LineFigure.VLine[self.Sign_Select - 1].set_visible(True)
             if self.Sign_Select == 1:
-                self.X1LineEdit.setText(str(event.xdata))
+                self.X1_LineEdit.setText(str(event.xdata))
             elif self.Sign_Select == 2:
-                self.X2LineEdit.setText(str(event.xdata))
+                self.X2_LineEdit.setText(str(event.xdata))
+
+        if event.button == MouseButton.RIGHT:
+            self.LineFigure.HLine[self.Sign_Select - 1].set_ydata(event.ydata)
+            self.LineFigure.HLine[self.Sign_Select - 1].set_visible(True)
+            if self.Sign_Select == 1:
+                self.Y1_LineEdit.setText(str(event.ydata))
+            elif self.Sign_Select == 2:
+                self.Y2_LineEdit.setText(str(event.ydata))
 
         if event.button == MouseButton.MIDDLE:
             self.LineFigure.HLine[self.Sign_Select - 1].set_visible(False)
             self.LineFigure.VLine[self.Sign_Select - 1].set_visible(False)
 
-        if(self.X1LineEdit.text() != None and self.X2LineEdit.text() != None):
-            self.XDiffLineEdit.setText(str(float(self.X2LineEdit.text()) - float(self.X1LineEdit.text())))
-        if(self.Y2LineEdit.text() != None and self.Y1LineEdit.text() != None):
-            self.YDiffLineEdit.setText(str(float(self.Y2LineEdit.text()) - float(self.Y1LineEdit.text())))
+        if(self.X1_LineEdit.text() != None and self.X2_LineEdit.text() != None):
+            self.XDiff_LineEdit.setText(str(float(self.X2_LineEdit.text()) - float(self.X1_LineEdit.text())))
+        if(self.Y2_LineEdit.text() != None and self.Y1_LineEdit.text() != None):
+            self.YDiff_LineEdit.setText(str(float(self.Y2_LineEdit.text()) - float(self.Y1_LineEdit.text())))
 
         self.LineFigure.draw()  # 重新画图
+
+    def Mouse_ScrollEvent(self, event):
+        #触发事件轴域
+        current_ax = event.inaxes
+        #X轴和Y轴起止范围
+        try:
+            x_min, x_max = current_ax.get_xlim()
+            y_min, y_max = current_ax.get_ylim()
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "x_min:", x_min, "x_max:", x_max, "y_min:", y_min, "y_max:", y_max)
+        except AttributeError as e:
+            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "Mouse_ScrollEvent Error:", e)
+            return
+
+        #滚动鼠标时坐标轴刻度缩放幅度
+        x_step = (x_max - x_min) / PaintWithAxis_Zooom_Range
+        y_step = (y_max - y_min) / PaintWithAxis_Zooom_Range
+        if event.button == 'up':
+            #鼠标向上滚，缩小坐标轴刻度范围，使得图形变大
+            # current_ax.set(xlim = (x_min + x_step, x_max - x_step), ylim = (y_min + y_step, y_max - y_step))
+            self.LineFigure.Axis.set_xlim(x_min + x_step, x_max - x_step + 2, auto=True)
+            self.LineFigure.Axis.set_ylim(y_min + y_step, y_max - y_step + 2, auto=True)
+        elif event.button == 'down':
+            #鼠标向下滚，增加坐标轴刻度范围，使得图形缩小
+            # current_ax.set(xlim=(x_min - x_step, x_max + x_step), ylim=(y_min - y_step, y_max + y_step))
+            self.LineFigure.Axis.set_xlim(x_min - x_step, x_max + x_step + 2, auto=True)
+            self.LineFigure.Axis.set_ylim(y_min - y_step, y_max + y_step + 2, auto=True)
+        # self.LineFigure.UseFigure.canvas.draw_idle()
+        self.LineFigure.draw()  # 重新画图
+
+        #同步更新滚动条
+        x_min, x_max = self.LineFigure.Axis.get_xlim()
+        # y_min, y_max = self.LineFigure.Axis.get_ylim()
+
+        if x_max > PaintWithAxis_CacheData_Length:
+            x_max = PaintWithAxis_CacheData_Length
+        self.HorizontalScrollBar.setValue(int(x_max)/PaintWithAxis_SlideShowData_Step)
+        self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
+        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Mouse_ScrollEvent After change x_max:", x_max, self.HorizontalScrollBar.value(), self.HorizontalScrollBar.maximum())
 
     def XYButton(self):
         sender = self.sender()
