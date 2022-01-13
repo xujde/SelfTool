@@ -273,12 +273,12 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                 self.LineFigure.Change_Axis_Xlim(Update_X_data) #只更新X轴坐标范围
                 self.LineFigure.Line.set_xdata(Update_X_data)
                 #Y轴数据需要匹配X轴长度
-                Update_Y_Data = [0 for i in range(len(Update_X_data))]
+                Update_Y_Data = [0 for k in range(len(Update_X_data))]
                 if len(Update_X_data) > len(self.LineFigure.Update_Y_Data):
                     diff = len(Update_X_data) - len(self.LineFigure.Update_Y_Data)
                 self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "UpdateData_UseSignal diff:", diff, "Update_X_data len:", len(Update_X_data), "Update_Y_Data len:", len(Update_Y_Data), "self.LineFigure.Update_Y_Data len:", len(self.LineFigure.Update_Y_Data))
-                for i in range(len(self.LineFigure.Update_Y_Data)):
-                    Update_Y_Data[diff + i] = self.LineFigure.Update_Y_Data[i]
+                for m in range(len(self.LineFigure.Update_Y_Data)):
+                    Update_Y_Data[diff + m] = self.LineFigure.Update_Y_Data[m]
                 self.LineFigure.Line.set_ydata(Update_Y_Data)
                 self.HorizontalScrollBar.setValue(int(x_max - self.LineFigure.Updata_Count) / PaintWithAxis_SlideShowData_Step) #设置滚动条的值
                 self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
@@ -336,7 +336,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             if PaintWithAxis_CacheData_Length < int(StartHorIndex + X_Range):
                 StartHorIndex = PaintWithAxis_CacheData_Length - int(X_Range)
 
-            Update_Y_Data = [0 for i in range(int(X_Range))]
+            Update_Y_Data = [0 for j in range(int(X_Range))]
             try:
                 for i in range(0, int(X_Range)): #获取当前坐标范围内数据
                     Update_Y_Data[i] = self.LineFigure.Cache_Y_Data[int(StartHorIndex) + i]
