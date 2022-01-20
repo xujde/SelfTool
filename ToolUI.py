@@ -337,10 +337,10 @@ class Tool_Widget(QWidget):
         sender = self.sender()
 
         if sender.text() == "单选按钮1":
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3,"单选按钮1")
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3,"单选按钮1")
 
         if sender.text() == "单选按钮2":
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3,"单选按钮2")
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3,"单选按钮2")
 
 class Tool_MainUI(QMainWindow):
     def __init__(self):

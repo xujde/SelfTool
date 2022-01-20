@@ -1,6 +1,7 @@
 import sys
 from enum import Enum
 import datetime
+from PyQt5.QtWidgets import QWidget, QMessageBox
 
 class LogModule(Enum):
     # 可根据不同工程包含的模块进行增加
@@ -26,18 +27,33 @@ class LogType(Enum):
     PrintType = 1 #print打印到stdout
     LogfileType = 2 #print输出到文件
 
+#print输出重定向到变量中
+class Self_Tool_ErrorLogFile():
+    def __init__(self):
+        self.ErrorLogMsg = ""
+    #需要有write方法
+    def write(self, Msg):
+        self.ErrorLogMsg += Msg
+
+    def Get(self):
+        return self.ErrorLogMsg
+
+    def Clear(self):
+        self.ErrorLogMsg = ""
 
 #调试日志功能
-class Self_Tool_Log():
+class Self_Tool_Log(QWidget):
     def __init__(self, parent=None):
+        super().__init__()
         self.LogType = LogType.PrintType
         self.LogModule = 0
         self.LogLevel = 0
+        self.ErrorLogFile = Self_Tool_ErrorLogFile()
 
         if self.LogType == LogType.LogfileType:#输出日志到文件先创建日志文件
             self.Create_LogFile()
 
-    def Log_Output(self, l_Module, l_Level, *cObjects, cSep=' ', cEnd='\n', cFile=sys.stdout, cFlush=False):
+    def NormalLog_Output(self, l_Module, l_Level, *cObjects, cSep=' ', cEnd='\n', cFile=sys.stdout, cFlush=False):
         try:
             if ((self.LogModule & (1 << int(str(l_Module.value)))) and (self.LogLevel >= int(str(l_Level.value)))):
                 if(self.LogType == LogType.PrintType):
@@ -46,6 +62,14 @@ class Self_Tool_Log():
                     print(*cObjects, sep=cSep, end=cEnd, file=self.LogFile, flush=cFlush)
         except Exception as e:
             print("LOG OUTPUT ERROR:", e, str(l_Module.value), str(l_Level.value))
+
+    def ErrorLog_Output(self, *cObjects, cSep=' ', cEnd='\n', cFile=sys.stdout, cFlush=False):
+        self.ErrorLogFile.Clear()
+        print(*cObjects, sep=cSep, end=cEnd, file=self.ErrorLogFile, flush=cFlush)
+        reply = QMessageBox.question(self, "Error", self.ErrorLogFile.Get(), QMessageBox.Yes |
+                                     QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            return
 
     def Change_Type(self, cType):
         if  self.LogType == cType:
