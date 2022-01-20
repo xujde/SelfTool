@@ -30,9 +30,9 @@ class Servers_UiUpdateWidgetMsg_Thread(threading.Thread):  # 继承父类threadi
             try:
                 msg = self.UseQueue.get()
                 self.UseWidget.ServerstextEdit.append(time.strftime("[%Y-%m-%d %H:%M:%S ]", time.localtime()) + msg)
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level6, "Servers_UiUpdateMsg_Thread Recv Msg:", msg)
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level6, "Servers_UiUpdateMsg_Thread Recv Msg:", msg)
             except Exception as e:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Servers_UiUpdateMsg_Thread Error:", e)
+                self.UseLog.ErrorLog_Output("Servers_UiUpdateMsg_Thread Error:", e)
 
 class Servers_UiUpdateWidgetData_Thread(threading.Thread):  # 继承父类threading.Thread
     def __init__(self, threadID, name, counter, Widget):
@@ -63,7 +63,7 @@ class Servers_Widget(QWidget, QThread):
             Servers_UiUpdateWidgetData_Thread(1, "ServersDataUpdateThread", 2, self).start()
             Servers_UiUpdateWidgetMsg_Thread(self).start()
         except Exception as e:
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "Widget Create and start Thread Error:", e)
+            self.UseLog.ErrorLog_Output("Widget Create and start Thread Error:", e)
 
     def Servers_Widget_Init(self):
         self.ServersUI_Setup()
@@ -171,17 +171,17 @@ class Servers_Widget(QWidget, QThread):
         sender = self.sender()
 
         if sender.text() == "Hex":
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Hex")
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Hex")
 
         if sender.text() == "Dex":
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Dex")
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Dex")
 
     def ServerUpdateUiData(self, data):
         self.Servers_Link_Num.setText(str(data))
 
     def ServerUpdateUiShow(self):
         self.Servers_Ip_Addr.setText(str(socket.gethostbyname(self.UseSoc.host)))
-        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level2, socket.gethostbyname_ex(self.UseSoc.host))
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level2, socket.gethostbyname_ex(self.UseSoc.host))
         self.Servers_Port_Num.setText(str(self.UseSoc.port))
         self.Servers_CommunicationData_Num.setText('发送数据量：'+ str(0)+ ' Byte --- 接收数据量：'+ str(0)+ ' Byte')
         if self.UseSoc.UseProtocol == Protocol.TCP:
@@ -306,7 +306,7 @@ class Servers_MainUI(QMainWindow):
     def Servers_SaveDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         if fname[0]:
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
             f = open(fname[0], 'w', encoding = 'utf-8')
             with f:
                 f.write(self.UseWidget.ServerstextEdit.toPlainText())
