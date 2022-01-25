@@ -23,11 +23,12 @@ matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号不显示的问
 
 PaintWithAxis_CacheData_Length = 10000 # 缓存绘图数据数量
 PaintWithAxis_SlideShowData_Step = 10 # 滚动条移动一步，更新绘图数据个数
-PaintWithAxis_ShowData_Length = 200 #默认显示绘图数据点个数
+PaintWithAxis_ShowData_Length = 200 #默认显示绘图数据点个数,需要大于串口解析出的数据个数
 PaintWithAxis_UpdateData_separator = ','
 PaintWithAxis_UpdateData_Index = 1
 PaintWithAxis_Zooom_Range = 10 #坐标轴刻度缩放幅度
 PaintWithAxis_Display_The_Latest_Data = True #是否显示最新数据
+PaintWithAxis_Setlim_Flag = False    #设置坐标轴范围限制标志,需要互斥
 
 class Serial_Tool_PaintWithAxisThread(QThread):
     signal = pyqtSignal(str) #信号
@@ -65,6 +66,7 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         self.Sign_Num = 2
         self.HLine = [self.Axis.axhline(0, visible=True) for i in range(self.Sign_Num)]#平行于X轴
         self.VLine = [self.Axis.axvline(0, visible=True) for i in range(self.Sign_Num)]#平行于Y轴
+        self.Update_X_Data = np.arange((self.CacheDataNum - self.ShowDataNum), self.CacheDataNum)
         self.Update_Y_Data = [0] * self.ShowDataNum
         self.Cache_Y_Data = [0] * self.CacheDataNum
 
@@ -109,18 +111,18 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         # self.Axis2.set_ylabel('y2坐标')
 
     def Change_Axis_XYlim(self, X_Data, Y_Data):
-        self.Axis.set_xlim(np.min(X_Data), np.max(X_Data) + 2, auto=True)
-        self.Axis.set_ylim(np.min(Y_Data), np.max(Y_Data) + 2, auto=True)  # y轴稍微多一点，会好看一点
+        self.Axis.set_xlim(np.min(X_Data), np.max(X_Data), auto=True)
+        self.Axis.set_ylim(np.min(Y_Data), np.max(Y_Data), auto=True)  # y轴稍微多一点，会好看一点
 
         self.XData_Max = np.max(X_Data)
         self.YData_Max = np.max(Y_Data)
 
         # self.Axis2 = self.Axis.twinx()
-        # self.Axis2.set_ylim(np.min(Y_Data), np.max(Y_Data) + 2)
+        # self.Axis2.set_ylim(np.min(Y_Data), np.max(Y_Data))
         # self.Axis2.set_ylabel('y2坐标')
 
     def Change_Axis_Xlim(self, X_Data):
-        self.Axis.set_xlim(np.min(X_Data), np.max(X_Data) + 2, auto=True)
+        self.Axis.set_xlim(np.min(X_Data), np.max(X_Data), auto=True)
         self.XData_Max = np.max(X_Data)
 
 class Serial_Tool_PaintWithAxisUi(QMainWindow):
@@ -249,44 +251,102 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.LineFigureLayout.addWidget(self.YDiff_LineEdit, 4, 4)
 
     def UpdateData_UseSignal(self, New_data):
+        global PaintWithAxis_Setlim_Flag
+
+        while PaintWithAxis_Setlim_Flag:
+            time.sleep(1)
+
+        PaintWithAxis_Setlim_Flag = True
+        OutListRangeFlag = 0 #测试验证使用稳定后删除！！！
+
         y_data = self.Update_Data_Analyse(New_data)
-        if len(y_data) > 0:
-            self.LineFigure.Updata_Count = len(y_data)
-            # 更新缓存数据
-            for i in range(0, PaintWithAxis_CacheData_Length - self.LineFigure.Updata_Count):
-                self.LineFigure.Cache_Y_Data[i] = self.LineFigure.Cache_Y_Data[i + self.LineFigure.Updata_Count]
-            for j in range(0, self.LineFigure.Updata_Count):
-                self.LineFigure.Cache_Y_Data[PaintWithAxis_CacheData_Length - self.LineFigure.Updata_Count + j] = y_data[j]
+        try:
+            if len(y_data) > 0:
+                self.LineFigure.Updata_Count = len(y_data)
+                if self.LineFigure.Updata_Count > PaintWithAxis_ShowData_Length:
+                    self.LineFigure.Updata_Count = PaintWithAxis_ShowData_Length
+                # 更新缓存数据
+                for i in range(0, PaintWithAxis_CacheData_Length - self.LineFigure.Updata_Count):
+                    self.LineFigure.Cache_Y_Data[i] = self.LineFigure.Cache_Y_Data[i + self.LineFigure.Updata_Count]
+                    OutListRangeFlag = 1
+                for j in range(0, self.LineFigure.Updata_Count):
+                    self.LineFigure.Cache_Y_Data[PaintWithAxis_CacheData_Length - self.LineFigure.Updata_Count + j] = y_data[j]
+                    OutListRangeFlag = 2
 
-            if PaintWithAxis_Display_The_Latest_Data:   #更新显示最新数据
-                Update_Y_Data = [0 for i in range(PaintWithAxis_ShowData_Length)]
-                for k in range(0, PaintWithAxis_ShowData_Length):
-                        self.LineFigure.Update_Y_Data[k] = self.LineFigure.Cache_Y_Data[PaintWithAxis_CacheData_Length - PaintWithAxis_ShowData_Length + k]
-                        Update_Y_Data[k] = self.LineFigure.Update_Y_Data[k]
-                if (np.max(Update_Y_Data) > self.LineFigure.YData_Max):  # 接收到的数据比坐标轴最大值大时更新坐标轴
-                    Update_X_data = np.arange(PaintWithAxis_CacheData_Length - PaintWithAxis_ShowData_Length, PaintWithAxis_CacheData_Length, 1)
-                    self.LineFigure.Change_Axis_XYlim(Update_X_data, Update_Y_Data)
-                self.LineFigure.Line.set_ydata(Update_Y_Data)
-            else: #不显示最新数据，但更新X轴坐标范围
-                x_min, x_max = self.LineFigure.Axis.get_xlim()
-                Update_X_data = np.arange(int(x_min - self.LineFigure.Updata_Count), int(x_max - self.LineFigure.Updata_Count))
-                self.LineFigure.Change_Axis_Xlim(Update_X_data) #只更新X轴坐标范围
-                self.LineFigure.Line.set_xdata(Update_X_data)
-                #Y轴数据需要匹配X轴长度
-                Update_Y_Data = [0 for k in range(len(Update_X_data))]
-                if len(Update_X_data) > len(self.LineFigure.Update_Y_Data):
-                    diff = len(Update_X_data) - len(self.LineFigure.Update_Y_Data)
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "UpdateData_UseSignal diff:", diff, "Update_X_data len:", len(Update_X_data), "Update_Y_Data len:", len(Update_Y_Data), "self.LineFigure.Update_Y_Data len:", len(self.LineFigure.Update_Y_Data))
-                for m in range(len(self.LineFigure.Update_Y_Data)):
-                    Update_Y_Data[diff + m] = self.LineFigure.Update_Y_Data[m]
-                self.LineFigure.Line.set_ydata(Update_Y_Data)
-                self.HorizontalScrollBar.setValue(int(x_max - self.LineFigure.Updata_Count) / PaintWithAxis_SlideShowData_Step) #设置滚动条的值
-                self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "UpdateData_UseSignal x_min:", x_min, " x_max:", x_max)
+                if PaintWithAxis_Display_The_Latest_Data:   #更新显示最新数据
+                    self.LineFigure.Update_Y_Data = [0 for i in range(PaintWithAxis_ShowData_Length)]
+                    OutListRangeFlag = 3
+                    for k in range(0, PaintWithAxis_ShowData_Length):
+                            self.LineFigure.Update_Y_Data[k] = self.LineFigure.Cache_Y_Data[PaintWithAxis_CacheData_Length - PaintWithAxis_ShowData_Length + k]
+                            OutListRangeFlag = 4
+                    if (np.max(self.LineFigure.Update_Y_Data) > self.LineFigure.YData_Max):  # 接收到的数据比坐标轴最大值大时更新坐标轴
+                        self.LineFigure.Update_X_Data = np.arange(PaintWithAxis_CacheData_Length - PaintWithAxis_ShowData_Length, PaintWithAxis_CacheData_Length, 1)
+                        self.LineFigure.Change_Axis_XYlim(self.LineFigure.Update_X_Data, self.LineFigure.Update_Y_Data)
+                    self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)
+                    OutListRangeFlag = 5
+                else: #不显示最新数据，但更新X轴坐标范围
+                    diff = 0; w = 0; n = 0; m = 0; v = 0; p = 0
+                    x_change_min = 0;x_change_max = 0
+                    x_min, x_max = self.LineFigure.Axis.get_xlim()
+                    #增加调整坐标轴范围之后范围限制
+                    if x_min - self.LineFigure.Updata_Count < 0:
+                        x_range = x_max - x_min + 1 #此处需要＋1，否则调整的X轴范围会越来越小
+                        x_change_min = 0
+                        x_change_max = x_range
+                    else:
+                        x_change_min = x_min - self.LineFigure.Updata_Count
+                        x_change_max = x_max - self.LineFigure.Updata_Count + 1  #此处需要＋1，否则调整的X轴范围会越来越小
+                    if (x_max - x_min) != (x_change_max - x_change_min):
+                        print("!= x_min:", x_min, "x_max:", x_max, "x_change_min:", x_change_min, "x_min:", x_change_max)
+                    self.LineFigure.Update_X_Data = np.arange(int(x_change_min), int(x_change_max))
+                    self.LineFigure.Change_Axis_Xlim(self.LineFigure.Update_X_Data) #只更新X轴坐标范围
+                    self.LineFigure.Line.set_xdata(self.LineFigure.Update_X_Data)
+                    OutListRangeFlag = 6
+                    #将历史显示值先记录下来
+                    Update_Y_Data = [0 for p in range(len(self.LineFigure.Update_Y_Data))]
+                    for p in range(len(self.LineFigure.Update_Y_Data)):
+                        Update_Y_Data[p] = self.LineFigure.Update_Y_Data[p]
+                        OutListRangeFlag = 7
+                    # Y轴数据需要匹配X轴长度
+                    if len(self.LineFigure.Update_X_Data) > len(self.LineFigure.Update_Y_Data):
+                        diff = len(self.LineFigure.Update_X_Data) - len(self.LineFigure.Update_Y_Data)
+                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "UpdateData_UseSignal diff:", diff, "self.LineFigure.Update_X_Data len:", len(self.LineFigure.Update_X_Data), "self.LineFigure.Update_Y_Data len:", len(self.LineFigure.Update_Y_Data))
 
-            self.LineFigure.draw()  # 重新画图
+                    self.LineFigure.Update_Y_Data = [0 for p in range(len(self.LineFigure.Update_X_Data))]  #更新列表长度
 
-        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "UpdateData_UseSignal y_data len:", len(y_data), "y:", self.LineFigure.Update_Y_Data)
+                    if diff > 0:
+                        for n in range(len(self.LineFigure.Cache_Y_Data)): #前面的值从self.LineFigure.Cache_Y_Data往前找历史值
+                            if Update_Y_Data[0] == self.LineFigure.Cache_Y_Data[n]:
+                                for w in range(len(Update_Y_Data)):
+                                    if Update_Y_Data[w] != self.LineFigure.Cache_Y_Data[n + w]:
+                                        break #不连续相同，继续查找
+                                if w == (len(Update_Y_Data) - 1):
+                                    for v in range(diff):
+                                        self.LineFigure.Update_Y_Data[v] = self.LineFigure.Cache_Y_Data[n - diff + v]
+                                        OutListRangeFlag = 8
+                                    break #找到连续相同，并获取到历史值，退出查找
+                        #很久之前的数据已经从缓存中删除
+                        if w == 0 and v == 0:
+                            for v in range(len(self.LineFigure.Update_Y_Data)):
+                                self.LineFigure.Update_Y_Data[v] = self.LineFigure.Cache_Y_Data[v]
+                                OutListRangeFlag = 9
+                            m = len(Update_Y_Data)
+
+                    for m in range(len(Update_Y_Data)):
+                        if m < len(self.LineFigure.Update_Y_Data):#需要self.LineFigure.Update_X_Data和self.LineFigure.Update_Y_Data的长度小于Update_Y_Data的情况
+                            self.LineFigure.Update_Y_Data[diff + m] = Update_Y_Data[m]
+                            OutListRangeFlag = 10
+
+                    print("n:", n, "m:", m, "v:", v, "w:", w, "p:", p, "diff", diff)
+                    self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)
+                    self.HorizontalScrollBar.setValue(int(x_change_max) / PaintWithAxis_SlideShowData_Step) #设置滚动条的值
+                    self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
+                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "UpdateData_UseSignal x_min:", x_min, " x_max:", x_max)
+
+                self.LineFigure.draw()  # 重新画图
+        except Exception as e:
+            self.UseLog.ErrorLog_Output("UpdateData_UseSignal Error:", e, "flag:", OutListRangeFlag)
+        PaintWithAxis_Setlim_Flag = False
 
     def PushButtonClickedHandle(self):
         sender = self.sender()
@@ -306,59 +366,71 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             # 增加对文件格式的判断
             try:
                 self.LineFigure.UseFigure.savefig(fname[0], dpi=400, bbox_inches='tight')
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Save Picture Success")
+                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Save Picture Success")
             except Exception as e:
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "Save Picture Error:", e)
+                self.UseLog.ErrorLog_Output("Save Picture Error:", e)
 
     def ScrollBarSliderMovedHandle(self):
-        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "ScrollBarSliderMovedHandle H:", self.HorizontalScrollBar.value(), "V:", self.VerticalScrollBar.value())
+        global PaintWithAxis_Setlim_Flag
+        while PaintWithAxis_Setlim_Flag:
+            time.sleep(1)
+        PaintWithAxis_Setlim_Flag = True
+        try:
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "ScrollBarSliderMovedHandle H:", self.HorizontalScrollBar.value(), "V:", self.VerticalScrollBar.value())
 
-        global PaintWithAxis_Display_The_Latest_Data
+            global PaintWithAxis_Display_The_Latest_Data
 
-        # 获取当前坐标轴范围
-        x_min, x_max = self.LineFigure.Axis.get_xlim()
-        y_min, y_max = self.LineFigure.Axis.get_ylim()
+            # 获取当前坐标轴范围
+            x_min, x_max = self.LineFigure.Axis.get_xlim()
+            # y_min, y_max = self.LineFigure.Axis.get_ylim()
 
-        if self.HorizontalScrollBarValue != self.HorizontalScrollBar.value():
-            if x_min >= 0:
-                X_Range = x_max - x_min
-                StartHorIndex = int(x_min)
-            else :
-                X_Range = x_max
-                StartHorIndex = 0
-            HorValueChange = self.HorizontalScrollBar.value() - self.HorizontalScrollBarValue #滚动条变化量
-            StartHorIndex = StartHorIndex + (HorValueChange * PaintWithAxis_SlideShowData_Step)
+            if self.HorizontalScrollBarValue != self.HorizontalScrollBar.value():
+                if x_min >= 0:
+                    X_Range = x_max - x_min + 1 #此处需要＋1，否则调整的X轴范围会越来越小
+                    StartHorIndex = int(x_min)
+                else :
+                    X_Range = x_max + 1
+                    StartHorIndex = 0
+                HorValueChange = self.HorizontalScrollBar.value() - self.HorizontalScrollBarValue #滚动条变化量
+                StartHorIndex = StartHorIndex + (HorValueChange * PaintWithAxis_SlideShowData_Step)
 
-            if StartHorIndex < 0:
-                StartHorIndex = 0
-            if int(X_Range) > PaintWithAxis_ShowData_Length:
-                X_Range = PaintWithAxis_ShowData_Length #后续优化，修改后X坐标数量和实际显示数量有差异
-            if PaintWithAxis_CacheData_Length < int(StartHorIndex + X_Range):
-                StartHorIndex = PaintWithAxis_CacheData_Length - int(X_Range)
+                if StartHorIndex < 0:
+                    StartHorIndex = 0
+                if PaintWithAxis_CacheData_Length < int(StartHorIndex + X_Range):
+                    StartHorIndex = PaintWithAxis_CacheData_Length - int(X_Range)
 
-            Update_Y_Data = [0 for j in range(int(X_Range))]
-            try:
-                for i in range(0, int(X_Range)): #获取当前坐标范围内数据
-                    Update_Y_Data[i] = self.LineFigure.Cache_Y_Data[int(StartHorIndex) + i]
-                    self.LineFigure.Update_Y_Data[i] = self.LineFigure.Cache_Y_Data[int(StartHorIndex) + i]
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "ScrollBarSliderMovedHandle StartHorIndex:", StartHorIndex, "x_min x_max:", x_min, x_max, "y_min, y_max:", y_min, y_max, "X_Range:", X_Range)
-            except Exception as e:
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "ScrollBarSliderMovedHandle StartHorIndex:", StartHorIndex, "X_Range:", X_Range, "i:", i, len(self.LineFigure.Update_Y_Data), len(self.LineFigure.Cache_Y_Data),"Error:", e)
+                self.LineFigure.Update_Y_Data = [0 for j in range(int(X_Range))]
+                try:
+                    for i in range(0, int(X_Range)): #获取当前坐标范围内数据
+                        self.LineFigure.Update_Y_Data[i] = self.LineFigure.Cache_Y_Data[int(StartHorIndex) + i]
+                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "ScrollBarSliderMovedHandle StartHorIndex:", StartHorIndex, "x_min x_max:", x_min, x_max, "X_Range:", X_Range)
+                except Exception as e:
+                    self.UseLog.ErrorLog_Output("ScrollBarSliderMovedHandle Error StartHorIndex:", StartHorIndex, "X_Range:", X_Range, "i:", i, len(self.LineFigure.Update_Y_Data), len(self.LineFigure.Cache_Y_Data),"Error:", e)
 
-            Update_X_data = np.arange(int(StartHorIndex), int(StartHorIndex + X_Range))
+                self.LineFigure.Update_X_Data = np.arange(int(StartHorIndex), int(StartHorIndex + X_Range))
+                if np.max(self.LineFigure.Update_X_Data) == np.min(self.LineFigure.Update_X_Data):
+                    print("== StartHorIndex:", StartHorIndex, "X_Range:", X_Range, "x_min x_max:", x_min, x_max)
+                    return
+                elif X_Range != (x_max - x_min + 1):
+                    print("!= StartHorIndex:", StartHorIndex, "X_Range:", X_Range, "x_min x_max:", x_min, x_max)
 
-            self.LineFigure.Change_Axis_Xlim(Update_X_data) #更新X轴坐标
-            self.LineFigure.Line.set_xdata(Update_X_data) #更新折线X轴数据，否则会出现未绘制过的X轴部分出现Y轴数据缺失显示
-            self.LineFigure.Line.set_ydata(Update_Y_Data) #更新折线Y轴数据,长度需要跟X轴数据一致，否则会出现“shape mismatch: objects cannot be broadcast to a single shape”错误
+                if len(self.LineFigure.Update_X_Data) == len(self.LineFigure.Update_Y_Data):
+                    self.LineFigure.Change_Axis_Xlim(self.LineFigure.Update_X_Data) #更新X轴坐标
+                    self.LineFigure.Line.set_xdata(self.LineFigure.Update_X_Data) #更新折线X轴数据，否则会出现未绘制过的X轴部分出现Y轴数据缺失显示
+                    self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data) #更新折线Y轴数据,长度需要跟X轴数据一致，否则会出现“shape mismatch: objects cannot be broadcast to a single shape”错误
 
-            self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
+                self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
 
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "ScrollBarSliderMovedHandle Update_Data len:", len(Update_X_data), len(Update_Y_Data))
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level8, "ScrollBarSliderMovedHandle Cache_Y_Data:", self.LineFigure.Cache_Y_Data)
-        elif self.VerticalScrollBarValue != self.VerticalScrollBar.value() :
-            self.VerticalScrollBarValue = self.VerticalScrollBar.value()
-        self.LineFigure.draw()  # 重新画图
-        PaintWithAxis_Display_The_Latest_Data = False #不自动显示最新的数据
+                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "ScrollBarSliderMovedHandle Update_Data len:", len(self.LineFigure.Update_X_Data), len(self.LineFigure.Update_Y_Data))
+                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level8, "ScrollBarSliderMovedHandle Cache_Y_Data:", self.LineFigure.Cache_Y_Data)
+            elif self.VerticalScrollBarValue != self.VerticalScrollBar.value() :
+                #改变Y轴的坐标轴范围
+                self.VerticalScrollBarValue = self.VerticalScrollBar.value()
+            self.LineFigure.draw()  # 重新画图
+            PaintWithAxis_Display_The_Latest_Data = False #不自动显示最新的数据
+        except Exception as e:
+            self.UseLog.ErrorLog_Output("ScrollBarSliderMovedHandle Error:", e, "self.LineFigure.Update_X_Data len:", len(self.LineFigure.Update_X_Data), "self.LineFigure.Update_Y_Data len:", len(self.LineFigure.Update_Y_Data))
+        PaintWithAxis_Setlim_Flag = False
 
     def closeEvent(self, event):
         reply = QMessageBox.question(self, 'Message',
@@ -373,11 +445,11 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
     def resizeEvent(self, event):
         Change_wide = event.size().width()
         Change_high = event.size().height()
-        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "Change_wide:", Change_wide, ",Change_high:", Change_high)
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "Change_wide:", Change_wide, ",Change_high:", Change_high)
         self.groupBox.setGeometry(QRect(self.Start_X, self.Start_Y, Change_wide - 2 * self.Start_X, Change_high - 2 * self.Start_Y))
 
     def Mouse_PressEvent(self, event):
-        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "event.xdata", event.xdata, "event.ydata", event.ydata, "event.button", event.button)
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "event.xdata", event.xdata, "event.ydata", event.ydata, "event.button", event.button)
         if event.button == MouseButton.LEFT:
             self.LineFigure.VLine[self.Sign_Select - 1].set_xdata(event.xdata)
             self.LineFigure.VLine[self.Sign_Select - 1].set_visible(True)
@@ -406,76 +478,115 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.LineFigure.draw()  # 重新画图
 
     def Mouse_ScrollEvent(self, event):
+        global PaintWithAxis_Setlim_Flag
+        while PaintWithAxis_Setlim_Flag:
+            time.sleep(1)
+        PaintWithAxis_Setlim_Flag = True
+
         #触发事件轴域
         current_ax = event.inaxes
         #X轴和Y轴起止范围
         try:
-            x_min, x_max = current_ax.get_xlim()
-            y_min, y_max = current_ax.get_ylim()
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "x_min:", x_min, "x_max:", x_max, "y_min:", y_min, "y_max:", y_max)
+            # x_min, x_max = current_ax.get_xlim()
+            # y_min, y_max = current_ax.get_ylim()
+            x_min, x_max = self.LineFigure.Axis.get_xlim()
+            y_min, y_max = self.LineFigure.Axis.get_ylim()
+            if x_min < 0:
+                x_min = 0
+            if x_max > PaintWithAxis_CacheData_Length:
+                x_max = PaintWithAxis_CacheData_Length
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "x_min:", x_min, "x_max:", x_max, "y_min:", y_min, "y_max:", y_max)
         except AttributeError as e:
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "Mouse_ScrollEvent Error:", e)
+            self.UseLog.ErrorLog_Output("Mouse_ScrollEvent Error:", e)
             return
 
         #滚动鼠标时坐标轴刻度缩放幅度
         x_step = (x_max - x_min) / PaintWithAxis_Zooom_Range
         y_step = (y_max - y_min) / PaintWithAxis_Zooom_Range
         if event.button == 'up':
-            #鼠标向上滚，缩小坐标轴刻度范围，使得图形变大
-            # current_ax.set(xlim = (x_min + x_step, x_max - x_step), ylim = (y_min + y_step, y_max - y_step))
-            self.LineFigure.Axis.set_xlim(x_min + x_step, x_max - x_step + 2, auto=True)
-            self.LineFigure.Axis.set_ylim(y_min + y_step, y_max - y_step + 2, auto=True)
+            # self.LineFigure.Axis.margins(0.5)
+
+            # # 鼠标向上滚，缩小坐标轴刻度范围，使得图形变大
+            x_change_min = x_min + x_step
+            x_change_max = x_max - x_step
+            y_change_min = y_min + y_step
+            y_change_max = y_max - y_step
+            if x_change_min < 0:
+                x_change_min = 0
+            if x_change_max > PaintWithAxis_CacheData_Length:
+                x_change_max = PaintWithAxis_CacheData_Length
+            # current_ax.set(xlim = (x_change_min, x_change_max), ylim = (y_change_min, y_change_max))
+            self.LineFigure.Axis.set_xlim(x_change_min, x_change_max, auto=True)
+            self.LineFigure.Axis.set_ylim(y_change_min, y_change_max, auto=True)
         elif event.button == 'down':
-            #鼠标向下滚，增加坐标轴刻度范围，使得图形缩小
-            # current_ax.set(xlim=(x_min - x_step, x_max + x_step), ylim=(y_min - y_step, y_max + y_step))
-            self.LineFigure.Axis.set_xlim(x_min - x_step, x_max + x_step + 2, auto=True)
-            self.LineFigure.Axis.set_ylim(y_min - y_step, y_max + y_step + 2, auto=True)
+            # self.LineFigure.Axis.margins(1)
+            # 鼠标向下滚，增加坐标轴刻度范围，使得图形缩小
+            x_change_min = x_min - x_step
+            x_change_max = x_max + x_step
+            y_change_min = y_min - y_step
+            y_change_max = y_max + y_step
+            if x_change_min < 0:
+                x_change_min = 0
+            if x_change_max > PaintWithAxis_CacheData_Length:
+                x_change_max = PaintWithAxis_CacheData_Length
+            # current_ax.set(xlim=(x_change_min, x_change_max), ylim=(y_change_min, y_change_max))
+            self.LineFigure.Axis.set_xlim(x_change_min, x_change_max, auto=True)
+            self.LineFigure.Axis.set_ylim(y_change_min, y_change_max, auto=True)
         # self.LineFigure.UseFigure.canvas.draw_idle()
         self.LineFigure.draw()  # 重新画图
 
         #同步更新滚动条
-        x_min, x_max = self.LineFigure.Axis.get_xlim()
+        After_x_min, Aftere_x_max = self.LineFigure.Axis.get_xlim()
         # y_min, y_max = self.LineFigure.Axis.get_ylim()
 
-        if x_max > PaintWithAxis_CacheData_Length:
-            x_max = PaintWithAxis_CacheData_Length
-        self.HorizontalScrollBar.setValue(int(x_max)/PaintWithAxis_SlideShowData_Step)
+        if Aftere_x_max > PaintWithAxis_CacheData_Length:
+            Aftere_x_max = PaintWithAxis_CacheData_Length
+        self.HorizontalScrollBar.setValue(int(Aftere_x_max)/PaintWithAxis_SlideShowData_Step)
         self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
-        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Mouse_ScrollEvent After change x_max:", x_max, self.HorizontalScrollBar.value(), self.HorizontalScrollBar.maximum())
+        PaintWithAxis_Display_The_Latest_Data = False  # 不自动显示最新的数据
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Mouse_ScrollEvent After change x_max:", x_max, self.HorizontalScrollBar.value(), self.HorizontalScrollBar.maximum())
+        PaintWithAxis_Setlim_Flag = False
+        print("x_min:", x_min, "x_max:", x_max, "x_step:", x_step, "x_change_min:", x_change_min, "x_change_max:", x_change_max)
+        print("y_min:", y_min, "y_max:", y_max, "y_step:", y_step, "y_change_min:", y_change_min, "y_change_max:", y_change_max)
 
     def XYButton(self):
         sender = self.sender()
         if sender.text() == "XY1":
             self.Sign_Select = 1
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "XY1")
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "XY1")
 
         if sender.text() == "XY2":
             self.Sign_Select = 2
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "XY2")
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "XY2")
 
     def Update_Data_Analyse(self, Source_Data):
         #解析接收到的字符串数据，先按指定分隔符切片，再将切片之后的数据转换成整型
-        Source_List = Source_Data.split('\r\n') #分出行数据
-        for i in range(len(Source_List) - 1):
-            Source_List[i] = Source_List[i].split(PaintWithAxis_UpdateData_separator)
+        try:
+            Source_List = Source_Data.split('\r\n') #分出行数据
+            for i in range(len(Source_List) - 1):
+                Source_List[i] = Source_List[i].split(PaintWithAxis_UpdateData_separator)
 
-        Result_List = [0 for i in range(len(Source_List) - 1)]
-        for i in range(len(Source_List) - 1):
-            Result_List[i] = [0 for j in range(len(Source_List[i]))]
+            Result_List = [0 for i in range(len(Source_List) - 1)]
+            for i in range(len(Source_List) - 1):
+                Result_List[i] = [0 for j in range(len(Source_List[i]))]
 
-        for i in range(len(Source_List) - 1):
-            for j in range(len(Source_List[i])):
-                try:
-                    Result_List[i][j] = float(Source_List[i][j])
-                except Exception as e:
-                    self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "str to float Error", e)
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Source_List[", i, "][", j, "]:", Source_List[i][j], type(Source_List[i][j]), Result_List[i][j])
+            for i in range(len(Source_List) - 1):
+                for j in range(len(Source_List[i])):
+                    try:
+                        Result_List[i][j] = float(Source_List[i][j])
+                    except Exception as e:
+                        self.UseLog.ErrorLog_Output("Update_Data_Analyse str to float Error", e)
+                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Source_List[", i, "][", j, "]:", Source_List[i][j], type(Source_List[i][j]), Result_List[i][j])
 
-        if len(Source_List) < PaintWithAxis_UpdateData_Index or len(Result_List) < PaintWithAxis_UpdateData_Index:   #源数据不完整无法解析出想要的数据
+            if len(Source_List) < PaintWithAxis_UpdateData_Index or len(Result_List) < PaintWithAxis_UpdateData_Index:   #源数据不完整无法解析出想要的数据
+                Error_List = []
+                return Error_List
+
+            return Result_List[PaintWithAxis_UpdateData_Index]
+        except Exception as e:
             Error_List = []
             return Error_List
-
-        return Result_List[PaintWithAxis_UpdateData_Index]
+            self.UseLog.ErrorLog_Output("Update_Data_Analyse Error:", e)
 
 class Serial_Tool_Widget(QWidget):
     def __init__(self, Log, GlobalVal):
@@ -501,7 +612,7 @@ class Serial_Tool_Widget(QWidget):
         self.Stop_Bits = ['1', '1.5', '2']
         self.Parity_Bits = ['None', 'Odd', 'Even', 'Mark', 'Space']
         self.PaintUpdateIndex_List = ['0', '1', '2', '3', '4']
-        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level8, "list", self.port_list)
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level8, "list", self.port_list)
 
         self.Ui_SetUp()
         self.Ui_Layout()
@@ -548,7 +659,7 @@ class Serial_Tool_Widget(QWidget):
         self.Port_comboBox = QComboBox(self)
         for i in range(0, len(self.port_list)):
             self.port_list[i] = str(self.port_list[i])
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level8, type(self.port_list[i]))
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level8, type(self.port_list[i]))
         self.Port_comboBox.addItems(self.port_list)
 
         self.Baud_comboBox = QComboBox(self)
@@ -637,40 +748,40 @@ class Serial_Tool_Widget(QWidget):
                 self.ByteSize = int(self.Data_comboBox.currentText())
             if len(self.Stop_comboBox.currentText()):
                 self.StopBits = float(self.Stop_comboBox.currentText())
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, len(self.OpenPort), self.BaudRate, self.ByteSize, self.StopBits)
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, len(self.OpenPort), self.BaudRate, self.ByteSize, self.StopBits)
             if (len(self.OpenPort) != 0 or self.BaudRate != 0):
-                self.Serial = SerialToolSer.Serial_Tool_Ser(self.OpenPort, self.BaudRate, self.ByteSize, self.StopBits, self.Parity, None, self.UseLog, self.UseGlobalVal)
-                if (self.Serial.Open_Ret == True):  # 判断串口是否成功打开
-                    try:
-                        self.OpenButton.setEnabled(False)
-                        self.Serial.SerThread.Signal.connect(self.ShowRecvData)
-                        self.Serial.SerThread.start()
-                        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' ' + self.OpenPort + ' Successful')
-                    except Exception as e:
-                        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "打开串口异常:", e)
-                else:
-                    self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' Fail')
+                try:
+                    self.Serial = SerialToolSer.Serial_Tool_Ser(self.OpenPort, self.BaudRate, self.ByteSize, self.StopBits, self.Parity, None, self.UseLog, self.UseGlobalVal)
+                    if (self.Serial.Open_Ret == True):  # 判断串口是否成功打开
+                            self.OpenButton.setEnabled(False)
+                            self.Serial.SerThread.Signal.connect(self.ShowRecvData)
+                            self.Serial.SerThread.start()
+                            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' ' + self.OpenPort + ' Successful')
+                    else:
+                        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' Fail')
+                except Exception as e:
+                    self.UseLog.ErrorLog_Output("打开串口异常:", e)
             else:
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, ' Please Select Port')
+                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, ' Please Select Port')
 
         if sender.text() == "关闭串口":
             self.OpenButton.setEnabled(True)
             if (self.Serial.Open_Ret == True):
                 self.Serial.SerialColsePort()
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' Successful')
+                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' Successful')
 
         if sender.text() == "发送数据":
             if (self.Serial.Open_Ret == True):
                 if(self.Format):
                     self.Serial.SerialWritePort(self.Sendtext_Edit.text())
-                    self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "Dex 写入字节数：", self.Serial.Send_Count)
+                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "Dex 写入字节数：", self.Serial.Send_Count)
                     self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + self.Sendtext_Edit.text())
                 else:
                     self.Serial.SerialWritePort(self.Sendtext_Edit.text().encode('utf-8').hex())
-                    self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, "Hex 写入字节数：", self.Serial.Send_Count)
+                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "Hex 写入字节数：", self.Serial.Send_Count)
                     self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + self.Sendtext_Edit.text().encode('utf-8').hex())
             else:
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' ERROR')
+                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' ERROR')
 
         if sender.text() == "清空发送框":
             self.Sendtext_Edit.clear()
@@ -682,7 +793,7 @@ class Serial_Tool_Widget(QWidget):
             self.port_list = list(serial.tools.list_ports.comports())
             for i in range(0, len(self.port_list)):
                 self.port_list[i] = str(self.port_list[i])
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, type(self.port_list[i]))
+                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, type(self.port_list[i]))
             self.Port_comboBox.clear()
             self.Port_comboBox.addItems(self.port_list)
 
@@ -693,35 +804,35 @@ class Serial_Tool_Widget(QWidget):
                 PaintWithAxis_UpdateData_Index = Index - 1
             else:
                 PaintWithAxis_UpdateData_Index = 0
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "绘图下标更新为：", PaintWithAxis_UpdateData_Index)
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "绘图下标更新为：", PaintWithAxis_UpdateData_Index)
 
     def RadioButtonClickedHandle(self):
         sender = self.sender()
         if sender.text() == "Dex":
             self.Format = True
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "Dex")
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "Dex")
 
         if sender.text() == "Hex":
             self.Format = False
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level6, "Hex")
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "Hex")
 
     # 选定串口
     def GetOpenPort(self, port_str):
         if len(port_str):
             Front_index = port_str.find('(')
             Rear_index = port_str.find(')')
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, len(port_str), Front_index, Rear_index)
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, len(port_str), Front_index, Rear_index)
             return port_str[Front_index+1:Rear_index]
-        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "Get Serial Port NUll")
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Get Serial Port NUll")
         return ''
 
     def ShowRecvData(self, RecvData):
-        self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level3, "ShowRecvData:", RecvData,"len:", len(RecvData))
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "ShowRecvData:", RecvData,"len:", len(RecvData))
         if(len(RecvData)):
             try:
                 self.Recvtext_Edit.append(RecvData)
             except Exception as e:
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "ShowRecvData  Recvtext_Edit append Error:", e)
+                self.UseLog.ErrorLog_Output("ShowRecvData  Recvtext_Edit append Error:", e)
 
 class Serial_Tool_MainUI(QMainWindow):
     def __init__(self):
@@ -844,13 +955,13 @@ class Serial_Tool_MainUI(QMainWindow):
         fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
         try:
             if fname[0]:
-                self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
+                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
                 f = open(fname[0], 'w', encoding = 'utf-8')
                 with f:
                     f.write(self.UseWidget.Recvtext_Edit.toPlainText())
                 f.close()
         except Exception as e:
-            print("write file Error:", e)
+            self.UseLog.ErrorLog_Output("write file Error:", e)
 
     def Start_Draw(self):
         try:
@@ -858,7 +969,7 @@ class Serial_Tool_MainUI(QMainWindow):
             self.UseDraw.setWindowIcon(QIcon('./Logo_Picture/PaintUI.jpeg'))
             self.UseDraw.show()
         except Exception as e:
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level1, "Draw New Paint Error:", e)
+            self.UseLog.ErrorLog_Output("Draw New Paint Error:", e)
 
     def Tool_LogOption(self):
         sender = self.sender()
@@ -889,7 +1000,7 @@ class Serial_Tool_MainUI(QMainWindow):
                             # print("LogLevelList", k, sender.text(), r)
 
         except Exception as e:
-            print("log option error:", e)
+            self.UseLog.ErrorLog_Output("log option error:", e)
 
     def closeEvent(self, event):
         reply = QMessageBox.question(self, 'Message',
