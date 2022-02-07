@@ -26,7 +26,7 @@ PaintWithAxis_SlideShowData_Step = 10 # 滚动条移动一步，更新绘图数�
 PaintWithAxis_ShowData_Length = 200 #默认显示绘图数据点个数,需要大于串口解析出的数据个数
 PaintWithAxis_UpdateData_separator = ','
 PaintWithAxis_UpdateData_Index = 1
-PaintWithAxis_Zooom_Range = 10 #坐标轴刻度缩放幅度
+PaintWithAxis_Zooom_Range = 2 #坐标轴刻度缩放幅度
 PaintWithAxis_Display_The_Latest_Data = True #是否显示最新数据
 PaintWithAxis_Setlim_Flag = False    #设置坐标轴范围限制标志,需要互斥
 
@@ -495,43 +495,43 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                 x_min = 0
             if x_max > PaintWithAxis_CacheData_Length:
                 x_max = PaintWithAxis_CacheData_Length
-            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "x_min:", x_min, "x_max:", x_max, "y_min:", y_min, "y_max:", y_max)
         except AttributeError as e:
             self.UseLog.ErrorLog_Output("Mouse_ScrollEvent Error:", e)
             return
 
         #滚动鼠标时坐标轴刻度缩放幅度
-        x_step = (x_max - x_min) / PaintWithAxis_Zooom_Range
-        y_step = (y_max - y_min) / PaintWithAxis_Zooom_Range
+        #计算出坐标轴中值
+        x_mid = (x_max + x_min) / 2
+        y_mid = (y_max + y_min) / 2
         if event.button == 'up':
-            # self.LineFigure.Axis.margins(0.5)
-
             # # 鼠标向上滚，缩小坐标轴刻度范围，使得图形变大
-            x_change_min = x_min + x_step
-            x_change_max = x_max - x_step
-            y_change_min = y_min + y_step
-            y_change_max = y_max - y_step
-            if x_change_min < 0:
-                x_change_min = 0
-            if x_change_max > PaintWithAxis_CacheData_Length:
-                x_change_max = PaintWithAxis_CacheData_Length
-            # current_ax.set(xlim = (x_change_min, x_change_max), ylim = (y_change_min, y_change_max))
-            self.LineFigure.Axis.set_xlim(x_change_min, x_change_max, auto=True)
-            self.LineFigure.Axis.set_ylim(y_change_min, y_change_max, auto=True)
+            x_change_range = (x_max - x_min) / PaintWithAxis_Zooom_Range
+            y_change_range = (y_max - y_min) / PaintWithAxis_Zooom_Range
         elif event.button == 'down':
-            # self.LineFigure.Axis.margins(1)
             # 鼠标向下滚，增加坐标轴刻度范围，使得图形缩小
-            x_change_min = x_min - x_step
-            x_change_max = x_max + x_step
-            y_change_min = y_min - y_step
-            y_change_max = y_max + y_step
-            if x_change_min < 0:
-                x_change_min = 0
-            if x_change_max > PaintWithAxis_CacheData_Length:
-                x_change_max = PaintWithAxis_CacheData_Length
-            # current_ax.set(xlim=(x_change_min, x_change_max), ylim=(y_change_min, y_change_max))
-            self.LineFigure.Axis.set_xlim(x_change_min, x_change_max, auto=True)
-            self.LineFigure.Axis.set_ylim(y_change_min, y_change_max, auto=True)
+            x_change_range = (x_max - x_min) * PaintWithAxis_Zooom_Range
+            y_change_range = (y_max - y_min) * PaintWithAxis_Zooom_Range
+
+        if int(x_change_range) > PaintWithAxis_CacheData_Length:
+            x_change_range = PaintWithAxis_CacheData_Length  # 显示出全部数据比例
+        if int(x_change_range) < 2:
+            x_change_range = 2
+
+        x_change_min = x_mid - (x_change_range/2)
+        x_change_max = x_mid + (x_change_range/2)
+        y_change_min = y_mid - (y_change_range/2)
+        y_change_max = y_mid + (y_change_range/2)
+
+        if x_change_max > PaintWithAxis_CacheData_Length:
+            x_change_max = PaintWithAxis_CacheData_Length
+            x_change_min = PaintWithAxis_CacheData_Length - x_change_range
+        if x_change_min < 1:
+            x_change_min = 0
+            x_change_max = x_change_range
+
+        # current_ax.set(xlim=(x_change_min, x_change_max), ylim=(y_change_min, y_change_max))
+        self.LineFigure.Axis.set_xlim(x_change_min, x_change_max, auto=True)
+        self.LineFigure.Axis.set_ylim(y_change_min, y_change_max, auto=True)
         # self.LineFigure.UseFigure.canvas.draw_idle()
         self.LineFigure.draw()  # 重新画图
 
@@ -544,10 +544,10 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.HorizontalScrollBar.setValue(int(Aftere_x_max)/PaintWithAxis_SlideShowData_Step)
         self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
         PaintWithAxis_Display_The_Latest_Data = False  # 不自动显示最新的数据
-        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Mouse_ScrollEvent After change x_max:", x_max, self.HorizontalScrollBar.value(), self.HorizontalScrollBar.maximum())
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Mouse_ScrollEvent  HorizontalScrollBar:", self.HorizontalScrollBar.value(), self.HorizontalScrollBar.maximum())
         PaintWithAxis_Setlim_Flag = False
-        print("x_min:", x_min, "x_max:", x_max, "x_step:", x_step, "x_change_min:", x_change_min, "x_change_max:", x_change_max)
-        print("y_min:", y_min, "y_max:", y_max, "y_step:", y_step, "y_change_min:", y_change_min, "y_change_max:", y_change_max)
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "x_min:", x_min, "x_max:", x_max, "x_mid:", x_mid, "x_change_range:", x_change_range, "x_change_min:", x_change_min, "x_change_max:", x_change_max, "After_x_min:", After_x_min, "Aftere_x_max:", Aftere_x_max)
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "y_min:", y_min, "y_max:", y_max, "y_mid:", y_mid, "y_change_range:", y_change_range, "y_change_min:", y_change_min, "y_change_max:", y_change_max)
 
     def XYButton(self):
         sender = self.sender()
@@ -576,6 +576,8 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                         Result_List[i][j] = float(Source_List[i][j])
                     except Exception as e:
                         self.UseLog.ErrorLog_Output("Update_Data_Analyse str to float Error", e)
+                        Error_List = []
+                        return Error_List
                     self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Source_List[", i, "][", j, "]:", Source_List[i][j], type(Source_List[i][j]), Result_List[i][j])
 
             if len(Source_List) < PaintWithAxis_UpdateData_Index or len(Result_List) < PaintWithAxis_UpdateData_Index:   #源数据不完整无法解析出想要的数据

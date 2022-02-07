@@ -56,10 +56,10 @@ class Serial_Tool_Ser(Serial):
                 # print("in_waiting", self.UseSer.in_waiting)
                 ReadSource = self.UseSer.read(self.UseSer.in_waiting)
                 try :
-                    ReadString =  ReadSource.decode('utf-8')#self.UseSer.read(self.UseSer.in_waiting).decode(encoding = 'utf-8')
+                    ReadString =  ReadSource.decode('utf-8', "ignore")#self.UseSer.read(self.UseSer.in_waiting).decode(encoding = 'utf-8')
                 except Exception as e:
                     self.UseLog.ErrorLog_Output("SerialReadData Error:", e)
-                    ReadString = binascii.b2a_hex(ReadSource).decode('utf-8')
+                    ReadString = binascii.b2a_hex(ReadSource).decode('utf-8', "ignore")
                     # print(ReadSource, "b2a_hex", ReadString)
                 self.Strglo += ReadString
                 # print("Strglo :", self.Strglo, type(self.Strglo))
