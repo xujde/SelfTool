@@ -49,42 +49,52 @@ class Serial_Tool_Ser(Serial):
     # 显示接收串口数据
     def SerialReadData(self, Signal):
         # 循环接收数据，此为死循环，可用线程实现
-        if(self.UseSer.isOpen):
-            self.Strglo = time.strftime("[%Y-%m-%d %H:%M:%S (R)]", time.localtime())
-            # Signal.emit(self.Strglo)
-            if self.UseSer.in_waiting:
-                # print("in_waiting", self.UseSer.in_waiting)
-                ReadSource = self.UseSer.read(self.UseSer.in_waiting)
-                try :
-                    ReadString =  ReadSource.decode('utf-8', "ignore")#self.UseSer.read(self.UseSer.in_waiting).decode(encoding = 'utf-8')
-                except Exception as e:
-                    self.UseLog.ErrorLog_Output("SerialReadData Error:", e)
-                    ReadString = binascii.b2a_hex(ReadSource).decode('utf-8', "ignore")
-                    # print(ReadSource, "b2a_hex", ReadString)
-                self.Strglo += ReadString
-                # print("Strglo :", self.Strglo, type(self.Strglo))
-                Signal.emit(self.Strglo)
-                if System.Serial_Tool_GlobalManager.Global_Get(self.UseGlobalVal, 'PaintWithAxis_Start_Flag'):
-                    Wait_Count = 0
-                    while System.Serial_Tool_GlobalManager.Global_Get(self.UseGlobalVal, 'PaintWithAxis_UpdateData_Flag'):
-                        time.sleep(1)
-                        Wait_Count = Wait_Count + 1
-                        if(Wait_Count > 10):
-                            self.UseLog.NormalLog_Output(LogModule.SerModule, LogLevel.Level3, "PaintWithAxis not use UpdateData")
-                            break
-                    System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_UpdateData', ReadString)
-                    System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_UpdateData_Flag', True)
+        try:
+            if self.UseSer.isOpen:
+                self.Strglo = time.strftime("[%Y-%m-%d %H:%M:%S (R)]", time.localtime())
+                # Signal.emit(self.Strglo)
+                if self.UseSer.in_waiting:
+                    # print("in_waiting", self.UseSer.in_waiting)
+                    ReadSource = self.UseSer.read(self.UseSer.in_waiting)
+                    try :
+                        ReadString =  ReadSource.decode('utf-8', "ignore")#self.UseSer.read(self.UseSer.in_waiting).decode(encoding = 'utf-8')
+                    except Exception as e:
+                        self.UseLog.ErrorLog_Output("SerialReadData Decode Error:", e)
+                        ReadString = binascii.b2a_hex(ReadSource).decode('utf-8', "ignore")
+                        # print(ReadSource, "b2a_hex", ReadString)
+                    self.Strglo += ReadString
+                    # print("Strglo :", self.Strglo, type(self.Strglo))
+                    Signal.emit(self.Strglo)
+                    if System.Serial_Tool_GlobalManager.Global_Get(self.UseGlobalVal, 'PaintWithAxis_Start_Flag'):
+                        Wait_Count = 0
+                        while System.Serial_Tool_GlobalManager.Global_Get(self.UseGlobalVal, 'PaintWithAxis_UpdateData_Flag'):
+                            time.sleep(1)
+                            Wait_Count = Wait_Count + 1
+                            if(Wait_Count > 10):
+                                self.UseLog.NormalLog_Output(LogModule.SerModule, LogLevel.Level3, "PaintWithAxis not use UpdateData")
+                                break
+                        System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_UpdateData', ReadString)
+                        System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_UpdateData_Flag', True)
+            else:
+                self.UseLog.NormalLog_Output(LogModule.SerModule, LogLevel.Level6, "SerialReadData Serial not open!!!")
+        except Exception as e:
+            System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'Serial_Open_Flag', False)
+            self.UseLog.ErrorLog_Output("SerialReadData Error:", e)
 
     # 关闭串口
     def SerialColsePort(self):
-        if self.UseSer.isOpen():
+        if self.UseSer.isOpen() and System.Serial_Tool_GlobalManager.Global_Get(self.UseGlobalVal, 'Serial_Open_Flag'):
             System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'Serial_Open_Flag', False)
             self.Open_Ret = False
             self.UseSer.close()
+        else:
+            self.UseLog.NormalLog_Output(LogModule.SerModule, LogLevel.Level6, "SerialColsePort Serial not open!!!")
 
     # 写数据
     def SerialWritePort(self, text):
         self.Send_Count = 0
-        if self.UseSer.isOpen:
+        if self.UseSer.isOpen and System.Serial_Tool_GlobalManager.Global_Get(self.UseGlobalVal, 'Serial_Open_Flag'):
             self.Send_Count = self.UseSer.write(text.encode("gbk"))  # 写数据
+        else:
+            self.UseLog.NormalLog_Output(LogModule.SerModule, LogLevel.Level6, "SerialWritePort Serial not open!!!")
 

@@ -222,7 +222,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.HorizontalScrollBar.actionTriggered.connect(self.ScrollBarSliderMovedHandle)
         # self.HorizontalScrollBar.sliderMoved.connect(self.ScrollBarSliderMovedHandle)
         self.HorizontalScrollBar.setValue(PaintWithAxis_CacheData_Length/PaintWithAxis_SlideShowData_Step)
-        self.VerticalScrollBar = QScrollBar(maximum = 1)
+        self.VerticalScrollBar = QScrollBar(maximum = 0)
         self.VerticalScrollBar.actionTriggered.connect(self.ScrollBarSliderMovedHandle)
         self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
         self.VerticalScrollBarValue = self.VerticalScrollBar.value()
@@ -297,7 +297,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                         x_change_min = x_min - self.LineFigure.Updata_Count
                         x_change_max = x_max - self.LineFigure.Updata_Count + 1  #此处需要＋1，否则调整的X轴范围会越来越小
                     if (x_max - x_min) != (x_change_max - x_change_min):
-                        print("!= x_min:", x_min, "x_max:", x_max, "x_change_min:", x_change_min, "x_min:", x_change_max)
+                        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "!= x_min:", x_min, "x_max:", x_max, "x_change_min:", x_change_min, "x_min:", x_change_max)
                     self.LineFigure.Update_X_Data = np.arange(int(x_change_min), int(x_change_max))
                     self.LineFigure.Change_Axis_Xlim(self.LineFigure.Update_X_Data) #只更新X轴坐标范围
                     self.LineFigure.Line.set_xdata(self.LineFigure.Update_X_Data)
@@ -337,7 +337,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                             self.LineFigure.Update_Y_Data[diff + m] = Update_Y_Data[m]
                             OutListRangeFlag = 10
 
-                    print("n:", n, "m:", m, "v:", v, "w:", w, "p:", p, "diff", diff)
+                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "n:", n, "m:", m, "v:", v, "w:", w, "p:", p, "diff", diff)
                     self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)
                     self.HorizontalScrollBar.setValue(int(x_change_max) / PaintWithAxis_SlideShowData_Step) #设置滚动条的值
                     self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
@@ -382,7 +382,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
 
             # 获取当前坐标轴范围
             x_min, x_max = self.LineFigure.Axis.get_xlim()
-            # y_min, y_max = self.LineFigure.Axis.get_ylim()
+            y_min, y_max = self.LineFigure.Axis.get_ylim()
 
             if self.HorizontalScrollBarValue != self.HorizontalScrollBar.value():
                 if x_min >= 0:
@@ -409,10 +409,10 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
 
                 self.LineFigure.Update_X_Data = np.arange(int(StartHorIndex), int(StartHorIndex + X_Range))
                 if np.max(self.LineFigure.Update_X_Data) == np.min(self.LineFigure.Update_X_Data):
-                    print("== StartHorIndex:", StartHorIndex, "X_Range:", X_Range, "x_min x_max:", x_min, x_max)
+                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "== StartHorIndex:", StartHorIndex, "X_Range:", X_Range, "x_min x_max:", x_min, x_max)
                     return
                 elif X_Range != (x_max - x_min + 1):
-                    print("!= StartHorIndex:", StartHorIndex, "X_Range:", X_Range, "x_min x_max:", x_min, x_max)
+                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "!= StartHorIndex:", StartHorIndex, "X_Range:", X_Range, "x_min x_max:", x_min, x_max)
 
                 if len(self.LineFigure.Update_X_Data) == len(self.LineFigure.Update_Y_Data):
                     self.LineFigure.Change_Axis_Xlim(self.LineFigure.Update_X_Data) #更新X轴坐标
@@ -425,6 +425,10 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                 self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level8, "ScrollBarSliderMovedHandle Cache_Y_Data:", self.LineFigure.Cache_Y_Data)
             elif self.VerticalScrollBarValue != self.VerticalScrollBar.value() :
                 #改变Y轴的坐标轴范围
+                Y_Change_min = y_min + (self.VerticalScrollBarValue - self.VerticalScrollBar.value())
+                Y_Change_Max = y_max + (self.VerticalScrollBarValue - self.VerticalScrollBar.value())
+                self.LineFigure.Axis.set_ylim(Y_Change_min, Y_Change_Max, auto=True)
+                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level8, "Y_Change_Max:", Y_Change_Max, "Y_Change_min:", Y_Change_min, self.VerticalScrollBarValue, self.VerticalScrollBar.value())
                 self.VerticalScrollBarValue = self.VerticalScrollBar.value()
             self.LineFigure.draw()  # 重新画图
             PaintWithAxis_Display_The_Latest_Data = False #不自动显示最新的数据
@@ -482,6 +486,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         while PaintWithAxis_Setlim_Flag:
             time.sleep(1)
         PaintWithAxis_Setlim_Flag = True
+        UpdateDataStartIndex = 0
 
         #触发事件轴域
         current_ax = event.inaxes
@@ -532,22 +537,58 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         # current_ax.set(xlim=(x_change_min, x_change_max), ylim=(y_change_min, y_change_max))
         self.LineFigure.Axis.set_xlim(x_change_min, x_change_max, auto=True)
         self.LineFigure.Axis.set_ylim(y_change_min, y_change_max, auto=True)
+
+        ################################# 增加显示数据的更新!!!#################################
+        if x_change_min >= 0:
+            X_Range = x_change_max - x_change_min + 1  # 此处需要＋1，否则调整的X轴范围会越来越小
+            UpdateDataStartIndex = int(x_change_min)
+        else:
+            X_Range = x_change_max + 1
+            UpdateDataStartIndex = 0
+
+        if UpdateDataStartIndex < 0:
+            UpdateDataStartIndex = 0
+        if PaintWithAxis_CacheData_Length < int(UpdateDataStartIndex + X_Range):
+            UpdateDataStartIndex = PaintWithAxis_CacheData_Length - int(X_Range)
+
+        self.LineFigure.Update_Y_Data = [0 for j in range(int(X_Range))]
+        try:
+            for i in range(0, int(X_Range)):  # 获取当前坐标范围内数据
+                self.LineFigure.Update_Y_Data[i] = self.LineFigure.Cache_Y_Data[int(UpdateDataStartIndex) + i]
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5,
+                                         "Mouse_ScrollEvent UpdateDataStartIndex:", UpdateDataStartIndex, "x_change_min x_change_max:",
+                                         x_change_min, x_change_max, "X_Range:", X_Range)
+        except Exception as e:
+            self.UseLog.ErrorLog_Output("Mouse_ScrollEvent Error StartHorIndex:", UpdateDataStartIndex, "X_Range:",
+                                        X_Range, "i:", i, len(self.LineFigure.Update_Y_Data),
+                                        len(self.LineFigure.Cache_Y_Data), "Error:", e)
+
+        self.LineFigure.Update_X_Data = np.arange(int(UpdateDataStartIndex), int(UpdateDataStartIndex + X_Range))
+        if np.max(self.LineFigure.Update_X_Data) == np.min(self.LineFigure.Update_X_Data):
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "#== UpdateDataStartIndex:", UpdateDataStartIndex, "X_Range:", X_Range, "x_change_min x_change_max:", x_change_min, x_change_max)
+            return
+        elif X_Range != (x_change_max - x_change_min + 1):
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "#!= UpdateDataStartIndex:", UpdateDataStartIndex, "X_Range:", X_Range, "x_change_min x_change_max:", x_change_min, x_change_max)
+
+        if len(self.LineFigure.Update_X_Data) == len(self.LineFigure.Update_Y_Data):
+            # self.LineFigure.Change_Axis_Xlim(self.LineFigure.Update_X_Data)  # 更新X轴坐标
+            self.LineFigure.Line.set_xdata(self.LineFigure.Update_X_Data)  # 更新折线X轴数据，否则会出现未绘制过的X轴部分出现Y轴数据缺失显示
+            self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)  # 更新折线Y轴数据,长度需要跟X轴数据一致，否则会出现“shape mismatch: objects cannot be broadcast to a single shape”错误
+
         # self.LineFigure.UseFigure.canvas.draw_idle()
         self.LineFigure.draw()  # 重新画图
 
         #同步更新滚动条
         After_x_min, Aftere_x_max = self.LineFigure.Axis.get_xlim()
-        # y_min, y_max = self.LineFigure.Axis.get_ylim()
+        After_y_min, Aftere_y_max = self.LineFigure.Axis.get_ylim()
 
-        if Aftere_x_max > PaintWithAxis_CacheData_Length:
-            Aftere_x_max = PaintWithAxis_CacheData_Length
-        self.HorizontalScrollBar.setValue(int(Aftere_x_max)/PaintWithAxis_SlideShowData_Step)
-        self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
+        self.Update_ScrollBar_Status( After_x_min, Aftere_x_max, After_y_min, Aftere_y_max)
+
         PaintWithAxis_Display_The_Latest_Data = False  # 不自动显示最新的数据
         self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Mouse_ScrollEvent  HorizontalScrollBar:", self.HorizontalScrollBar.value(), self.HorizontalScrollBar.maximum())
         PaintWithAxis_Setlim_Flag = False
         self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "x_min:", x_min, "x_max:", x_max, "x_mid:", x_mid, "x_change_range:", x_change_range, "x_change_min:", x_change_min, "x_change_max:", x_change_max, "After_x_min:", After_x_min, "Aftere_x_max:", Aftere_x_max)
-        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "y_min:", y_min, "y_max:", y_max, "y_mid:", y_mid, "y_change_range:", y_change_range, "y_change_min:", y_change_min, "y_change_max:", y_change_max)
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "y_min:", y_min, "y_max:", y_max, "y_mid:", y_mid, "y_change_range:", y_change_range, "y_change_min:", y_change_min, "y_change_max:", y_change_max, "After_y_min:", After_y_min, "Aftere_y_max:", Aftere_y_max)
 
     def XYButton(self):
         sender = self.sender()
@@ -590,12 +631,84 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             return Error_List
             self.UseLog.ErrorLog_Output("Update_Data_Analyse Error:", e)
 
+    def Update_ScrollBar_Status(self, After_x_min, Aftere_x_max, After_y_min, Aftere_y_max):
+        Ver_Max = 0; Ver_Min = 0; VerBarValue = -1; VerBarLength = -1
+
+        #横向滚动条处理
+        if Aftere_x_max > PaintWithAxis_CacheData_Length:
+            Aftere_x_max = PaintWithAxis_CacheData_Length
+        self.HorizontalScrollBar.setValue(int(Aftere_x_max)/PaintWithAxis_SlideShowData_Step)
+        self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
+
+        #纵向滚动条处理
+        After_y_range = Aftere_y_max - After_y_min
+        Cache_Y_Data_Min = np.min(self.LineFigure.Cache_Y_Data)
+        Cache_Y_Data_Max = np.max(self.LineFigure.Cache_Y_Data)
+        Cache_Y_Data_range = Cache_Y_Data_Max - Cache_Y_Data_Min
+        if After_y_range >= Cache_Y_Data_range and (Aftere_y_max >= Cache_Y_Data_Max and After_y_min <= Cache_Y_Data_Min):
+                # 滚动条的长度为1
+                VerBarLength = 0
+        else:
+            if Aftere_y_max >= Cache_Y_Data_Max:
+                Ver_Max = Aftere_y_max
+                # # 滚动条位于最上
+                # VerBarValue = Ver_Min
+            else:
+                Ver_Max = Cache_Y_Data_Max
+
+            if After_y_min <= Cache_Y_Data_Min:
+                Ver_Min = After_y_min
+                # # 滚动条位于最下
+                # VerBarValue = Ver_Max
+            else:
+                Ver_Min = Cache_Y_Data_Min
+
+        #可增加倍数值处理
+        if VerBarLength == -1:
+            VerBarLength = (Ver_Max - Ver_Min)
+        if VerBarLength < 0:
+            VerBarLength = 0
+        if VerBarValue == -1:
+            VerBarValue = (VerBarLength - After_y_min)
+        if VerBarValue < 0:
+            VerBarValue = 0
+
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Aftere_y_max:", Aftere_y_max, "After_y_min:", After_y_min, "Cache_Y_Data_Max:", Cache_Y_Data_Max, "Cache_Y_Data_Min:", Cache_Y_Data_Min)
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "VerBarLength:", VerBarLength, "VerBarValue:", VerBarValue, "Ver_Max:", Ver_Max, "Ver_Min:", Ver_Min)
+        self.VerticalScrollBar.setMaximum(VerBarLength)
+        self.VerticalScrollBar.setValue(VerBarValue)
+        self.VerticalScrollBarValue = self.VerticalScrollBar.value()
+
+
+class Serial_Tool_UiUpdateWidgetStatus_Thread(threading.Thread):  # 继承父类threading.Thread
+    def __init__(self, threadID, name, counter, Widget):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.counter = counter
+        self.UseGlobalVal = Widget.UseGlobalVal
+        self.Widget = Widget
+
+    def run(self):  # 把要执行的代码写到run函数里面 线程在创建后会直接运行run函数
+        while True:
+            time.sleep(1)
+            SerOpenFlag = System.Serial_Tool_GlobalManager.Global_Get(self.UseGlobalVal, 'Serial_Open_Flag')
+            if SerOpenFlag:
+                self.Widget.OpenButton.setEnabled(False)
+            else:
+                self.Widget.OpenButton.setEnabled(True)
+
 class Serial_Tool_Widget(QWidget):
     def __init__(self, Log, GlobalVal):
         super().__init__()
         self.UseLog = Log
         self.UseGlobalVal = GlobalVal
         self.initUI()
+
+        try:
+            Serial_Tool_UiUpdateWidgetStatus_Thread(1, "Serial_Tool_UiUpdateWidgetStatus_Thread", 2, self).start()
+        except Exception as e:
+            self.UseLog.ErrorLog_Output("Widget Create and start Thread Error:", e)
 
     def initUI(self):
         self.OpenPort = " "
@@ -1010,6 +1123,8 @@ class Serial_Tool_MainUI(QMainWindow):
                                      QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
             self.UseLog.Log_Close()
+            if 'UseDraw' in dir(self):#判断类中是否存在该属性
+                self.UseDraw.close()
             event.accept()
         else:
             event.ignore()
