@@ -1,7 +1,7 @@
 import time, threading, random
 from PyQt5.QtWidgets import (QWidget, QPushButton, QMainWindow, QAction, QTextEdit, QLineEdit,
                              QGridLayout, QFileDialog, QLabel, QRadioButton, QMenu, QGroupBox, QScrollBar, QAbstractSlider,
-                             QListWidget, QCheckBox, QListWidgetItem, QDesktopWidget, QComboBox, QMessageBox)
+                             QListWidget, QCheckBox, QListWidgetItem, QDesktopWidget, QComboBox, QMessageBox, QProgressBar)
 from PyQt5.QtGui import QIcon, QPainter, QFont, QColor, QPen, QBrush, QPixmap
 from PyQt5.QtCore import Qt, QSize, QRect, QTimer, pyqtSignal, QThread, QPoint, QMetaObject, QCoreApplication
 import matplotlib
@@ -614,7 +614,8 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             for i in range(len(Source_List) - 1):
                 for j in range(len(Source_List[i])):
                     try:
-                        Result_List[i][j] = float(Source_List[i][j])
+                        if Source_List[i][j] != '':
+                            Result_List[i][j] = float(Source_List[i][j])
                     except Exception as e:
                         self.UseLog.ErrorLog_Output("Update_Data_Analyse str to float Error", e)
                         Error_List = []
@@ -699,10 +700,10 @@ class Serial_Tool_UiUpdateWidgetStatus_Thread(threading.Thread):  # 继承父类
                 self.Widget.OpenButton.setEnabled(True)
 
 class Serial_Tool_Widget(QWidget):
-    def __init__(self, Log, GlobalVal):
+    def __init__(self, MainUI):
         super().__init__()
-        self.UseLog = Log
-        self.UseGlobalVal = GlobalVal
+        self.UseLog = MainUI.UseLog
+        self.UseGlobalVal = MainUI.UseGlobalVal
         self.initUI()
 
         try:
@@ -949,15 +950,57 @@ class Serial_Tool_Widget(QWidget):
             except Exception as e:
                 self.UseLog.ErrorLog_Output("ShowRecvData  Recvtext_Edit append Error:", e)
 
+class Serial_Tool_Progress_Thread(QThread):
+    Signal = pyqtSignal(int)  # 定义信号类型为整型
+
+    def __init__(self, nProgress):
+        super(Serial_Tool_Progress_Thread, self).__init__()
+        self.UseProgress = nProgress
+
+    def __del__(self):
+        self.wait()
+
+    def run(self):
+        for i in range(1, 100):
+            if self.UseProgress.StartInitFlag == False:
+                return
+            time.sleep(self.UseProgress.StartInitTime/100)
+            self.Signal.emit(i)  # 发射信号
+
+class Serial_Tool_Progress(QWidget):
+    def __init__(self):
+        super(Serial_Tool_Progress, self).__init__()
+        self.StartInitFlag = True
+        self.StartInitTime = 2 #初始化时间，进度条显示加载完成时间
+        self.UseProgressbar = QProgressBar(self)  # 进度条的定义(默认步骤最大值为99，最小值为0)
+        self.UseProgressbar.setGeometry(30, 60, 500, 20) # 进度条的大小和位置，前两个是位置，后两个是大小
+        self.UseProgressbar.setValue(0)
+        self.show()
+        self.ProgressThread = Serial_Tool_Progress_Thread(self)  # 实例化线程
+        self.ProgressThread.Signal.connect(self.Signal_Accept)  # 将线程累中定义的信号链接到本类中的信号接收函数中
+        self.ProgressThread.start()  # 启动线程，启动线程直接调用线程中的start方法，这个方法会调用run函数，因此不用调用run函数
+
+    def Signal_Accept(self, ProgressIndex):
+        print("ProgressIndex；", ProgressIndex)
+        self.UseProgressbar.setValue(int(ProgressIndex))  # 将线程的参数传入进度条
+        if self.UseProgressbar.value() == 99:
+            self.UseProgressbar.reset()
+
+    def Exit(self):
+        self.StartInitFlag = False
+        self.close()
+
+
 class Serial_Tool_MainUI(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.UseProgress = Serial_Tool_Progress()
         self.UseLog = System.Serial_Tool_Log()
         self.UseGlobalVal = System.Serial_Tool_GlobalManager()  # 初始化参数
         self.Serial_Tool_MainUI_Init()
 
     def Serial_Tool_MainUI_Init(self):
-        self.UseWidget = Serial_Tool_Widget(self.UseLog, self.UseGlobalVal)
+        self.UseWidget = Serial_Tool_Widget(self)
         self.setCentralWidget(self.UseWidget)
         # self.MyDraw = Serial_Tool_Paint()#Serial_Tool_Draw()
         #创建状态栏的小窗口
@@ -994,6 +1037,8 @@ class Serial_Tool_MainUI(QMainWindow):
         self.setWindowTitle('Serial_Tool')
         self.setWindowIcon(QIcon('./Logo_Picture/SerialToolMainUI.jpeg'))
         self.show()
+
+        self.UseProgress.Exit()
 
     def Serial_Tool_LogMenu_Init(self):
         #日志输出类型UI选项
