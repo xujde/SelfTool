@@ -43,6 +43,7 @@ class Serial_Tool_Ser(Serial):
             System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'Serial_Open_Flag', True)
             try:
                 self.SerThread = Serial_Tool_SerThread(self.SerialReadData, self.UseGlobalVal)
+                self.SerThread.setDaemon(True)
             except Exception as e:
                 self.UseLog.ErrorLog_Output("Serial_Tool_Ser 创建线程异常：", e)
 

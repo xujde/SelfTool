@@ -707,7 +707,9 @@ class Serial_Tool_Widget(QWidget):
         self.initUI()
 
         try:
-            Serial_Tool_UiUpdateWidgetStatus_Thread(1, "Serial_Tool_UiUpdateWidgetStatus_Thread", 2, self).start()
+            self.UiUpdateWidgetStatusThread = Serial_Tool_UiUpdateWidgetStatus_Thread(1, "Serial_Tool_UiUpdateWidgetStatus_Thread", 2, self)
+            self.UiUpdateWidgetStatusThread.setDaemon(True)
+            self.UiUpdateWidgetStatusThread.start()
         except Exception as e:
             self.UseLog.ErrorLog_Output("Widget Create and start Thread Error:", e)
 
@@ -957,9 +959,6 @@ class Serial_Tool_Progress_Thread(QThread):
         super(Serial_Tool_Progress_Thread, self).__init__()
         self.UseProgress = nProgress
 
-    def __del__(self):
-        self.wait()
-
     def run(self):
         for i in range(1, 100):
             if self.UseProgress.StartInitFlag == False:
@@ -981,7 +980,6 @@ class Serial_Tool_Progress(QWidget):
         self.ProgressThread.start()  # 启动线程，启动线程直接调用线程中的start方法，这个方法会调用run函数，因此不用调用run函数
 
     def Signal_Accept(self, ProgressIndex):
-        print("ProgressIndex；", ProgressIndex)
         self.UseProgressbar.setValue(int(ProgressIndex))  # 将线程的参数传入进度条
         if self.UseProgressbar.value() == 99:
             self.UseProgressbar.reset()

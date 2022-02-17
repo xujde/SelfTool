@@ -2,7 +2,8 @@
 
 set New_Name=Serial_Tool
 ::编译输出到文件夹，加速exe文件启动速度
-pyinstaller -D .\main.py -n %New_Name%
+pyinstaller -D -w .\main.py -n %New_Name%
+::pyinstaller -D .\main.py -n %New_Name%
 
 ::生成exe文件，运行期间无命令行窗口
 ::pyinstaller -F -w .\main.py -n %New_Name%
