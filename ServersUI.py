@@ -17,7 +17,9 @@ from ServersSocket import Protocol
 matplotlib.rcParams['font.sans-serif'] = ['SimHei']  # 解决坐标轴中文显示问题
 matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号不显示的问题
 
-class Servers_UiUpdateWidgetMsg_Thread(threading.Thread):  # 继承父类threading.Thread
+class Servers_UiUpdateWidgetMsg_Thread(QThread, threading.Thread):  # 继承父类threading.Thread
+    Signal = pyqtSignal(str)
+
     def __init__(self, Widget):
         super().__init__()
         self.UseWidget = Widget
@@ -29,10 +31,12 @@ class Servers_UiUpdateWidgetMsg_Thread(threading.Thread):  # 继承父类threadi
             # 阻塞程序，时刻监听接收消息
             try:
                 msg = self.UseQueue.get()
-                # self.UseWidget.ServerstextEdit.append(time.strftime("[%Y-%m-%d %H:%M:%S ]", time.localtime()) + msg)
+                Message = (time.strftime("[%Y-%m-%d %H:%M:%S ]", time.localtime()) + msg)
+                self.Signal.emit(Message)
                 self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level6, "Servers_UiUpdateMsg_Thread Recv Msg:", msg)
             except Exception as e:
                 self.UseLog.ErrorLog_Output("Servers_UiUpdateMsg_Thread Error:", e)
+
 
 class Servers_UiUpdateWidgetData_Thread(threading.Thread):  # 继承父类threading.Thread
     def __init__(self, threadID, name, counter, Widget):
@@ -50,6 +54,7 @@ class Servers_UiUpdateWidgetData_Thread(threading.Thread):  # 继承父类thread
             RecvNum = ServersSystem.Servers_GlobalManager.Global_Get(self.UseGlobalVal, 'SocketRecvDataNum')
             self.Widget.Servers_CommunicationData_Num.setText('发送数据量：'+ str(SendNum)+ ' Byte --- 接收数据量：'+ str(RecvNum)+ ' Byte')
 
+
 class Servers_Widget(QWidget, QThread):
     def __init__(self, UseLog, Soc, GlobalVal, Queue):
         super().__init__()
@@ -65,6 +70,7 @@ class Servers_Widget(QWidget, QThread):
             self.UiUpdateWidgetDataThread.start()
             self.UiUpdateWidgetMsgThread = Servers_UiUpdateWidgetMsg_Thread(self)
             self.UiUpdateWidgetMsgThread.setDaemon(True)
+            self.UiUpdateWidgetMsgThread.Signal.connect(self.ServersShowRecvData)
             self.UiUpdateWidgetMsgThread.start()
         except Exception as e:
             self.UseLog.ErrorLog_Output("Widget Create and start Thread Error:", e)
@@ -94,7 +100,7 @@ class Servers_Widget(QWidget, QThread):
         self.Servers_Link_Num = QLabel()
         self.Servers_Link_Num.setGeometry(QRect(10, 20, 100, 20))
         self.Servers_CommunicationData_Num = QLabel()
-        self.ServerUpdateUiShow()
+        self.ServersUpdateUiShow()
 
         #行编辑和文本编辑框
         self.ServersLineEdit = QLineEdit()
@@ -154,9 +160,9 @@ class Servers_Widget(QWidget, QThread):
 
     def ServersUI_SignalInit(self):
         if self.UseSoc.UseProtocol == Protocol.TCP:
-            self.UseSoc.AccpetThread.Signal.connect(self.ServerUpdateUiData)
+            self.UseSoc.AccpetThread.Signal.connect(self.ServersUpdateUiData)
         elif self.UseSoc.UseProtocol == Protocol.UDP:
-            self.UseSoc.UDPThread.Signal.connect(self.ServerUpdateUiData)
+            self.UseSoc.UDPThread.Signal.connect(self.ServersUpdateUiData)
 
     def ServersPushButtonClickedHandle(self):
         sender = self.sender()
@@ -169,7 +175,7 @@ class Servers_Widget(QWidget, QThread):
 
         if sender.text() == "切换协议":
             self.UseSoc.Socket_ProtocolSwitch(self.Servers_ComboBox.currentText())
-            self.ServerUpdateUiShow()
+            self.ServersUpdateUiShow()
 
     def ServersRadioButtonClickedHandle(self):
         sender = self.sender()
@@ -180,10 +186,10 @@ class Servers_Widget(QWidget, QThread):
         if sender.text() == "Dex":
             self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Dex")
 
-    def ServerUpdateUiData(self, data):
+    def ServersUpdateUiData(self, data):
         self.Servers_Link_Num.setText(str(data))
 
-    def ServerUpdateUiShow(self):
+    def ServersUpdateUiShow(self):
         self.Servers_Ip_Addr.setText(str(socket.gethostbyname(self.UseSoc.host)))
         self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level2, socket.gethostbyname_ex(self.UseSoc.host))
         self.Servers_Port_Num.setText(str(self.UseSoc.port))
@@ -194,6 +200,15 @@ class Servers_Widget(QWidget, QThread):
         elif self.UseSoc.UseProtocol == Protocol.UDP:
             self.Servers_LinkNum.setText('通信次数')
             self.Servers_Link_Num.setText(str(self.UseSoc.UDPThread.Client_Link_Num))
+
+    def ServersShowRecvData(self, RecvData):
+        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "ShowRecvData:", RecvData,"len:", len(RecvData))
+        if(len(RecvData)):
+            try:
+                self.ServerstextEdit.append(RecvData)
+            except Exception as e:
+                self.UseLog.ErrorLog_Output("ServersShowRecvData  ServerstextEdit Error:", e)
+
 
 class Servers_MainUI(QMainWindow):
     def __init__(self):
