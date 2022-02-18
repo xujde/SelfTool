@@ -29,7 +29,7 @@ class Servers_UiUpdateWidgetMsg_Thread(threading.Thread):  # 继承父类threadi
             # 阻塞程序，时刻监听接收消息
             try:
                 msg = self.UseQueue.get()
-                self.UseWidget.ServerstextEdit.append(time.strftime("[%Y-%m-%d %H:%M:%S ]", time.localtime()) + msg)
+                # self.UseWidget.ServerstextEdit.append(time.strftime("[%Y-%m-%d %H:%M:%S ]", time.localtime()) + msg)
                 self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level6, "Servers_UiUpdateMsg_Thread Recv Msg:", msg)
             except Exception as e:
                 self.UseLog.ErrorLog_Output("Servers_UiUpdateMsg_Thread Error:", e)
@@ -60,8 +60,12 @@ class Servers_Widget(QWidget, QThread):
         self.Servers_Widget_Init()
 
         try:
-            Servers_UiUpdateWidgetData_Thread(1, "ServersDataUpdateThread", 2, self).start()
-            Servers_UiUpdateWidgetMsg_Thread(self).start()
+            self.UiUpdateWidgetDataThread = Servers_UiUpdateWidgetData_Thread(1, "ServersDataUpdateThread", 2, self)
+            self.UiUpdateWidgetDataThread.setDaemon(True)
+            self.UiUpdateWidgetDataThread.start()
+            self.UiUpdateWidgetMsgThread = Servers_UiUpdateWidgetMsg_Thread(self)
+            self.UiUpdateWidgetMsgThread.setDaemon(True)
+            self.UiUpdateWidgetMsgThread.start()
         except Exception as e:
             self.UseLog.ErrorLog_Output("Widget Create and start Thread Error:", e)
 
@@ -342,7 +346,7 @@ class Servers_MainUI(QMainWindow):
                             # print("LogLevelList", k, sender.text(), r)
 
         except Exception as e:
-            print("log option error:", e)
+            self.UseLog.ErrorLog_Output("log option error:", e)
 
     def closeEvent(self, event):
         reply = QMessageBox.question(self, 'Message',

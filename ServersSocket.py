@@ -18,6 +18,7 @@ class Protocol(Enum):
     UDP = 2
     MQTT = 3
 
+
 class Servers_Socket():
     def __init__(self, Log, GlobalVal, Queue):
         self.UseLog = Log
@@ -38,18 +39,20 @@ class Servers_Socket():
             self.Socket.listen(5)  # 等待客户端连接
             try:
                 self.AccpetThread = Servers_AcceptThread(self)
+                self.AccpetThread.setDaemon(True)
                 self.AccpetThread.start()
             except Exception as e:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Create AcceptThread Error:", e)
+                self.UseLog.ErrorLog_Output("Create AcceptThread Error:", e)
         elif self.UseProtocol == Protocol.UDP:
             self.Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 创建 socket 对象
             self.port = Servers_UDP_Port  # 设置端口
             self.Socket.bind((self.host, self.port))  # 绑定端口
             try:
                 self.UDPThread = Servers_UDPThread(self)
+                self.UDPThread.setDaemon(True)
                 self.UDPThread.start()
             except Exception as e:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Create UDPThread Error:", e)
+                self.UseLog.ErrorLog_Output("Create UDPThread Error:", e)
 
     def Socket_Recv(self, Client_Id):
         try:
@@ -61,11 +64,16 @@ class Servers_Socket():
                 return 0
             PutQueueMsg = str("收：") + str(data)
             self.UseQueue.put(PutQueueMsg)
-            self.DataHandle.Data_Analyse(Client_Id, data)
+            if self.UseProtocol == Protocol.TCP:
+                self.DataHandle.Data_Analyse(Client_Id, data)
+            elif self.UseProtocol == Protocol.UDP:
+                self.DataHandle.Data_Analyse(Addr, data)
+            else:
+                self.UseLog.ErrorLog_Output("Recv No Define UseProtocol")
             Num = ServersSystem.Servers_GlobalManager.Global_Get(self.UseGlobalVal, 'SocketRecvDataNum') + len(data)
             ServersSystem.Servers_GlobalManager.Global_Set(self.UseGlobalVal, 'SocketRecvDataNum', Num)
         except ConnectionResetError as e:
-            self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, 'Recv Error:', e)
+            self.UseLog.ErrorLog_Output("Recv Error:", e)
             return 0
         return len(data)
 
@@ -74,7 +82,7 @@ class Servers_Socket():
 
     def Socket_Close_Client(self, Client_Id):
         Client_Id.close()
-        self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Servers close :", Client_Id)
+        self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Servers close :", Client_Id)
 
     def Servers_Socket_Close(self):
         self.Socket.close()
@@ -82,21 +90,22 @@ class Servers_Socket():
     def Socket_ProtocolSwitch(self, NewProtocol):
         try:
             if NewProtocol == self.UseProtocol.name:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "UseProtocol the same as NewProtocol")
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "UseProtocol the same as NewProtocol")
             elif NewProtocol == Protocol.TCP.name:
                 self.Socket.close()
                 self.UseProtocol = Protocol.TCP
                 self.Socket_Create()
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Protocol Switch to :", NewProtocol)
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Protocol Switch to :", NewProtocol)
             elif NewProtocol ==  Protocol.UDP.name:
                 self.Socket.close()
                 self.UseProtocol = Protocol.UDP
                 self.Socket_Create()
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Protocol Switch to :", NewProtocol)
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Protocol Switch to :", NewProtocol)
             else:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Not Support this Protocol:", NewProtocol)
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Not Support this Protocol:", NewProtocol)
         except Exception as e:
-            print(e)
+            self.UseLog.ErrorLog_Output("Socket_ProtocolSwitch Error:", e)
+
 
 class Servers_AcceptThread(QThread, threading.Thread):
     Signal = pyqtSignal(int)
@@ -112,10 +121,6 @@ class Servers_AcceptThread(QThread, threading.Thread):
         self.ClientLinkTime = [0 for i in range(Servers_Support_Client_Link_Num)]
         self.Client_Link_Num = 0
 
-    def __del__(self):
-        for i in range(len(self.Client_id)):
-            self.Client_id[i].close()
-
     def run(self):
         while True:
             try:
@@ -125,10 +130,10 @@ class Servers_AcceptThread(QThread, threading.Thread):
                     ClientHandleThread.Signal.connect(self.Change_ClientLinkFlag)
                     ClientHandleThread.start()
                 except Exception as e:
-                    self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "create ClientHandleThread Error:", e)
+                    self.UseLog.ErrorLog_Output("create ClientHandleThread Error:", e)
             except Exception as e:
-                self.__del__()
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Servers_AcceptThread accept Error:", e)
+                self.CloseClient()
+                self.UseLog.ErrorLog_Output("Servers_AcceptThread accept Error:", e)
                 break
 
             Index = self.Client_Link_Num%Servers_Support_Client_Link_Num
@@ -164,14 +169,18 @@ class Servers_AcceptThread(QThread, threading.Thread):
 
             self.Client_Link_Num = self.Client_Link_Num + 1
             self.Signal.emit(self.Client_Link_Num)
-            self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level2, 'Index:', Index, '连接地址：', self.Client_addr[Index], 'ClientLinkTime:', self.ClientLinkTime[Index])
+            self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level2, 'Index:', Index, '连接地址：', self.Client_addr[Index], 'ClientLinkTime:', self.ClientLinkTime[Index])
 
     def Change_ClientLinkFlag(self, cClient_id):
-        self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level6, "Change_ClientLinkFlag:", cClient_id)
+        self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level6, "Change_ClientLinkFlag:", cClient_id)
         for i in range(len(self.Client_id)):
             if self.Client_id[i] == cClient_id:
                 self.ClientLinkTime[i] = 0
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client", i, "close success")
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Client", i, "close success")
+
+    def CloseClient(self):
+        for i in range(len(self.Client_id)):
+            self.Client_id[i].close()
 
 
 class Servers_ClientHandleThread(QThread, threading.Thread):
@@ -184,16 +193,12 @@ class Servers_ClientHandleThread(QThread, threading.Thread):
         self.UseLog = Servers.UseLog
         self.UseGlobalVal = Servers.UseGlobalVal
 
-    def __del__(self):
-        # 线程状态改变与线程终止
-        self.wait()
-
     def run(self):
         while (getattr(self.Client_id, "_closed") == False):
             recvdatalen = self.Servers.Socket_Recv(self.Client_id)
             if recvdatalen == 0:
                 self.Signal.emit(self.Client_id)
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client close", self.Client_id)
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Client close", self.Client_id)
                 break
 
 
@@ -208,10 +213,6 @@ class Servers_UDPThread(QThread, threading.Thread):
         self.UseGlobalVal = Servers.UseGlobalVal
         self.Client_Link_Num = 0
 
-    def __del__(self):
-        # 线程状态改变与线程终止
-        self.wait()
-
     def run(self):
         while True:
             try:
@@ -219,7 +220,7 @@ class Servers_UDPThread(QThread, threading.Thread):
                 self.Client_Link_Num = self.Client_Link_Num + 1
                 self.Signal.emit(self.Client_Link_Num)
             except Exception as e:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Servers_UDPThread Error:", e)
+                self.UseLog.ErrorLog_Output("Servers_UDPThread Error:", e)
                 break
 
 
@@ -234,20 +235,20 @@ class Servers_DataHandle():
     def Data_Analyse(self, Client, RecvData):
         try:
             if self.UseProtocol == Protocol.TCP:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client id:", Client, ",Recv data:", RecvData.decode())
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Client id:", Client, ",Recv data:", RecvData.decode())
                 #可增加需要回复的相关数据
                 self.Data_Packet(Client, RecvData)
             elif self.UseProtocol == Protocol.UDP:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client addr:", Client, ",Recv data:", RecvData)
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Client addr:", Client, ",Recv data:", RecvData)
                 # 可增加需要回复的相关数据
                 self.Data_Packet(Client, RecvData)
         except Exception as e:
-            self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Data_Analyse Error:", e)
+            self.UseLog.ErrorLog_Output("Data_Analyse Error:", e)
 
     def Data_Packet(self, Client, SendData):
         try:
             if self.UseProtocol == Protocol.TCP:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client id:", Client, ",Send data:",  SendData)
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Client id:", Client, ",Send data:",  SendData)
                 #可增加对回复数据的自定义打包
                 Num =  Client.send(SendData)
                 Num = Num + ServersSystem.Servers_GlobalManager.Global_Get(self.UseGlobalVal, 'SocketSendDataNum')
@@ -255,7 +256,7 @@ class Servers_DataHandle():
                 PutQueueMsg = str("发：") + str(SendData)
                 self.UseQueue.put(PutQueueMsg)
             elif self.UseProtocol == Protocol.UDP:
-                self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level3, "Client addr:", Client, ",Send data:",  SendData)
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Client addr:", Client, ",Send data:",  SendData)
                 # 可增加对回复数据的自定义打包
                 Num = self.Servers.Socket.sendto(SendData, Client)
                 Num = Num + ServersSystem.Servers_GlobalManager.Global_Get(self.UseGlobalVal, 'SocketSendDataNum')
@@ -263,4 +264,4 @@ class Servers_DataHandle():
                 PutQueueMsg = str("发：") + str(SendData)
                 self.UseQueue.put(PutQueueMsg)
         except Exception as e:
-            self.UseLog.Log_Output(LogModule.SocModule, LogLevel.Level1, "Data_Packet Error:", e)
+            self.UseLog.ErrorLog_Output("Data_Packet Error:", e)
