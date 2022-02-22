@@ -66,10 +66,7 @@ class Self_Tool_Log(QWidget):
     def ErrorLog_Output(self, *cObjects, cSep=' ', cEnd='\n', cFile=sys.stdout, cFlush=False):
         self.ErrorLogFile.Clear()
         print(*cObjects, sep=cSep, end=cEnd, file=self.ErrorLogFile, flush=cFlush)
-        reply = QMessageBox.question(self, "Error", self.ErrorLogFile.Get(), QMessageBox.Yes |
-                                     QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            return
+        reply = QMessageBox.critical(self, "Error", self.ErrorLogFile.Get(), QMessageBox.Yes)
 
     def Change_Type(self, cType):
         if  self.LogType == cType:
