@@ -132,6 +132,9 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.UseGlobalVal = GlobalVal
         self.Sign_Select = 1
 
+        global PaintWithAxis_Display_The_Latest_Data
+        PaintWithAxis_Display_The_Latest_Data = True
+
         self.setWindowTitle('绘制动态曲线')
         Wide = 1000;High = 800
         self.Start_X = 10;self.Start_Y = 10
@@ -259,6 +262,9 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         PaintWithAxis_Setlim_Flag = True
         OutListRangeFlag = 0 #测试验证使用稳定后删除！！！
 
+        x_min, x_max = self.LineFigure.Axis.get_xlim()
+        Update_Mark_Line_XMove = 0
+
         y_data = self.Update_Data_Analyse(New_data)
         try:
             if len(y_data) > 0:
@@ -283,11 +289,11 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                         self.LineFigure.Update_X_Data = np.arange(PaintWithAxis_CacheData_Length - PaintWithAxis_ShowData_Length, PaintWithAxis_CacheData_Length, 1)
                         self.LineFigure.Change_Axis_XYlim(self.LineFigure.Update_X_Data, self.LineFigure.Update_Y_Data)
                     self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)
+                    Update_Mark_Line_XMove = self.LineFigure.Updata_Count*-1    #数据增加，整体曲线往前移
                     OutListRangeFlag = 5
                 else: #不显示最新数据，但更新X轴坐标范围
                     diff = 0; w = 0; n = 0; m = 0; v = 0; p = 0
                     x_change_min = 0;x_change_max = 0
-                    x_min, x_max = self.LineFigure.Axis.get_xlim()
                     #增加调整坐标轴范围之后范围限制
                     if x_min - self.LineFigure.Updata_Count < 0:
                         x_range = x_max - x_min + 1 #此处需要＋1，否则调整的X轴范围会越来越小
@@ -337,11 +343,21 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                             self.LineFigure.Update_Y_Data[diff + m] = Update_Y_Data[m]
                             OutListRangeFlag = 10
 
+                    if x_change_max == x_max:   #判断X坐标轴的变化，确定标记线移动方向和长度
+                        if x_change_min != x_min:
+                            Update_Mark_Line_XMove = x_change_min - x_min - 1 #此处不-1标记线移动的长度会比更新的数据长度小1
+                        else:
+                            Update_Mark_Line_XMove = self.LineFigure.Updata_Count*-1
+                    else:
+                        Update_Mark_Line_XMove = x_change_max - x_max - 1 #此处不-1标记线移动的长度会比更新的数据长度小1
+
                     self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "n:", n, "m:", m, "v:", v, "w:", w, "p:", p, "diff", diff)
                     self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)
                     self.HorizontalScrollBar.setValue(int(x_change_max) / PaintWithAxis_SlideShowData_Step) #设置滚动条的值
                     self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
                     self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "UpdateData_UseSignal x_min:", x_min, " x_max:", x_max)
+
+                self.Update_Mark_Line(Update_Mark_Line_XMove)
 
                 self.LineFigure.draw()  # 重新画图
         except Exception as e:
@@ -362,7 +378,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'PaintWithAxis_Start_Flag', False)
 
         if sender.text() == "保存":
-            fname = QFileDialog.getOpenFileName(self, 'Open file', '/first.png')
+            fname = QFileDialog.getSaveFileName(self, 'Open file', '/*.png')
             # 增加对文件格式的判断
             try:
                 self.LineFigure.UseFigure.savefig(fname[0], dpi=400, bbox_inches='tight')
@@ -679,6 +695,23 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.VerticalScrollBar.setMaximum(VerBarLength)
         self.VerticalScrollBar.setValue(VerBarValue)
         self.VerticalScrollBarValue = self.VerticalScrollBar.value()
+
+    def Update_Mark_Line(self, X_Move):
+        for i in range(self.Sign_Select):
+            X_Old = np.mean(self.LineFigure.VLine[i]. get_xdata())#标记为直线,取平均值
+            X_Vline = X_Old + X_Move
+            if X_Vline < 0:
+                X_Vline = 0
+            if self.LineFigure.VLine[i].get_visible():
+                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level8, "VLine:", i, "X_Old:", X_Old, "X_Move:", X_Move)
+                self.LineFigure.VLine[i].set_xdata(X_Vline)
+                if i == 0:
+                    self.X1_LineEdit.setText(str(X_Vline))
+                elif i == 1:
+                    self.X2_LineEdit.setText(str(X_Vline))
+
+        if (self.X1_LineEdit.text() != None and self.X2_LineEdit.text() != None):
+            self.XDiff_LineEdit.setText(str(float(self.X2_LineEdit.text()) - float(self.X1_LineEdit.text())))
 
 
 class Serial_Tool_UiUpdateWidgetStatus_Thread(threading.Thread):  # 继承父类threading.Thread
@@ -1110,7 +1143,7 @@ class Serial_Tool_MainUI(QMainWindow):
                 self.UseWidget.Recvtext_Edit.setText(data)
 
     def SaveDialog(self):
-        fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
+        fname = QFileDialog.getSaveFileName(self, 'Open file', '/*.txt')
         try:
             if fname[0]:
                 self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
