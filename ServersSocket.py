@@ -33,7 +33,8 @@ class Servers_Socket():
         ServersSystem.Servers_GlobalManager.Global_Set(self.UseGlobalVal, 'SocketSendDataNum', 0)
         ServersSystem.Servers_GlobalManager.Global_Set(self.UseGlobalVal, 'SocketRecvDataNum', 0)
         if self.UseProtocol == Protocol.TCP:
-            self.Socket = socket.socket()  # 创建 socket 对象
+            self.Socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # 创建 socket 对象
+            self.Socket.setblocking(False)  # 设置为非阻塞
             self.port = Servers_TCP_Port  # 设置端口
             self.Socket.bind((self.host, self.port))  # 绑定端口
             self.Socket.listen(5)  # 等待客户端连接
@@ -45,6 +46,7 @@ class Servers_Socket():
                 self.UseLog.ErrorLog_Output("Create AcceptThread Error:", e)
         elif self.UseProtocol == Protocol.UDP:
             self.Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 创建 socket 对象
+            self.Socket.setblocking(False)  # 设置为非阻塞
             self.port = Servers_UDP_Port  # 设置端口
             self.Socket.bind((self.host, self.port))  # 绑定端口
             try:
@@ -56,25 +58,38 @@ class Servers_Socket():
 
     def Socket_Recv(self, Client_Id):
         try:
+            Pass_Flag = False
             if self.UseProtocol == Protocol.TCP:
-                data = Client_Id.recv(Servers_Support_RecvData_Max)  # 接收数据
+                try:
+                    data = Client_Id.recv(Servers_Support_RecvData_Max)  # 接收数据
+                except BlockingIOError as Err:
+                    Pass_Flag = True
+                    pass
             elif self.UseProtocol == Protocol.UDP:
-                data, Addr = self.Socket.recvfrom(Servers_Support_RecvData_Max)
+                try:
+                    data, Addr = self.Socket.recvfrom(Servers_Support_RecvData_Max)
+                except BlockingIOError as Err:
+                    Pass_Flag = True
+                    pass
             else:
                 return 0
-            PutQueueMsg = str("收：") + str(data)
-            self.UseQueue.put(PutQueueMsg)
-            if self.UseProtocol == Protocol.TCP:
-                self.DataHandle.Data_Analyse(Client_Id, data)
-            elif self.UseProtocol == Protocol.UDP:
-                self.DataHandle.Data_Analyse(Addr, data)
+
+            if not Pass_Flag:
+                PutQueueMsg = str("收：") + str(data)
+                self.UseQueue.put(PutQueueMsg)
+                if self.UseProtocol == Protocol.TCP:
+                    self.DataHandle.Data_Analyse(Client_Id, data)
+                elif self.UseProtocol == Protocol.UDP:
+                    self.DataHandle.Data_Analyse(Addr, data)
+                else:
+                    self.UseLog.ErrorLog_Output("Recv No Define UseProtocol")
+                Num = ServersSystem.Servers_GlobalManager.Global_Get(self.UseGlobalVal, 'SocketRecvDataNum') + len(data)
+                ServersSystem.Servers_GlobalManager.Global_Set(self.UseGlobalVal, 'SocketRecvDataNum', Num)
             else:
-                self.UseLog.ErrorLog_Output("Recv No Define UseProtocol")
-            Num = ServersSystem.Servers_GlobalManager.Global_Get(self.UseGlobalVal, 'SocketRecvDataNum') + len(data)
-            ServersSystem.Servers_GlobalManager.Global_Set(self.UseGlobalVal, 'SocketRecvDataNum', Num)
+                return -2
         except ConnectionResetError as e:
             self.UseLog.ErrorLog_Output("Recv Error:", e)
-            return 0
+            return -1
         return len(data)
 
     def Socket_Send(self, Client_Id, Send_Msg):
@@ -92,17 +107,17 @@ class Servers_Socket():
             if NewProtocol == self.UseProtocol.name:
                 self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "UseProtocol the same as NewProtocol")
             elif NewProtocol == Protocol.TCP.name:
-                self.Socket.close()
+                self.Servers_Socket_Close()
                 self.UseProtocol = Protocol.TCP
                 self.Socket_Create()
                 self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Protocol Switch to :", NewProtocol)
-            elif NewProtocol ==  Protocol.UDP.name:
-                self.Socket.close()
+            elif NewProtocol == Protocol.UDP.name:
+                self.Servers_Socket_Close()
                 self.UseProtocol = Protocol.UDP
                 self.Socket_Create()
                 self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Protocol Switch to :", NewProtocol)
             else:
-                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Not Support this Protocol:", NewProtocol)
+                self.UseLog.ErrorLog_Output("Not Support this Protocol:", NewProtocol)
         except Exception as e:
             self.UseLog.ErrorLog_Output("Socket_ProtocolSwitch Error:", e)
 
@@ -124,7 +139,33 @@ class Servers_AcceptThread(QThread, threading.Thread):
     def run(self):
         while True:
             try:
-                client_id, client_addr = self.Socket.accept()  # 建立客户端连接
+                # 前面需要一个操作稍微一点点延时，否则切换协议瞬间以下操作不成立抛出异常
+                if self.Servers.UseProtocol != Protocol.TCP:
+                    return
+
+                NewLinkFlag = True
+                try:
+                    client_id, client_addr = self.Socket.accept()  # 建立客户端连接
+                except BlockingIOError as Err:  #使用非阻塞模式时使用了accept阻塞操作会有此异常抛出pass掉
+                    pass
+
+                # 非阻塞模式需判断是否建立了新连接和新建立的连接是否已存在
+                if 'client_id' in dir():
+                    for cid in self.Client_id:
+                        if client_id == cid:
+                            NewLinkFlag = False
+                            break
+                    if not NewLinkFlag:
+                        time.sleep(1)
+                        continue
+                    else:
+                        client_id.setblocking(False)  # 设置非阻塞
+                else:
+                    time.sleep(1)
+                    continue
+
+                self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level8, "accept create clinet thread!")
+
                 try:
                     ClientHandleThread = Servers_ClientHandleThread(client_id, self.Servers)# 创建客户端
                     ClientHandleThread.Signal.connect(self.Change_ClientLinkFlag)
@@ -133,7 +174,7 @@ class Servers_AcceptThread(QThread, threading.Thread):
                     self.UseLog.ErrorLog_Output("create ClientHandleThread Error:", e)
             except Exception as e:
                 self.CloseClient()
-                self.UseLog.ErrorLog_Output("Servers_AcceptThread accept Error:", e)
+                self.UseLog.ErrorLog_Output("Servers_AcceptThread accept Error:", e, self.Servers.UseProtocol)
                 break
 
             Index = self.Client_Link_Num%Servers_Support_Client_Link_Num
@@ -194,8 +235,15 @@ class Servers_ClientHandleThread(QThread, threading.Thread):
         self.UseGlobalVal = Servers.UseGlobalVal
 
     def run(self):
-        while (getattr(self.Client_id, "_closed") == False):
+        while True:
+            if (getattr(self.Client_id, "_closed") == True):
+                return
+
             recvdatalen = self.Servers.Socket_Recv(self.Client_id)
+
+            if recvdatalen == -2:
+                time.sleep(1)
+                continue
             if recvdatalen == 0:
                 self.Signal.emit(self.Client_id)
                 self.UseLog.NormalLog_Output(LogModule.SocModule, LogLevel.Level3, "Client close", self.Client_id)
@@ -211,16 +259,24 @@ class Servers_UDPThread(QThread, threading.Thread):
         self.Socket = Servers.Socket
         self.UseLog = Servers.UseLog
         self.UseGlobalVal = Servers.UseGlobalVal
+        self.UseProtocol = Servers.UseProtocol
         self.Client_Link_Num = 0
 
     def run(self):
         while True:
+            if self.Servers.UseProtocol != Protocol.UDP:
+                return
+
             try:
-                self.Servers.Socket_Recv(None)
-                self.Client_Link_Num = self.Client_Link_Num + 1
-                self.Signal.emit(self.Client_Link_Num)
+                datalen = self.Servers.Socket_Recv(None)
+                if datalen > 0:
+                    self.Client_Link_Num = self.Client_Link_Num + 1
+                    self.Signal.emit(self.Client_Link_Num)
+                else:
+                    time.sleep(1)
+                    continue
             except Exception as e:
-                self.UseLog.ErrorLog_Output("Servers_UDPThread Error:", e)
+                self.UseLog.ErrorLog_Output("Servers_UDPThread Error:", e, self.Servers.UseProtocol)
                 break
 
 
