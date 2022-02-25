@@ -447,9 +447,9 @@ class Tool_MainUI(QMainWindow):
                 self.UseWidget.ToolInputLineEdit.setText(data)
 
     def Tool_SaveDialog(self):
-        fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')
+        fname = QFileDialog.getSaveFileName(self, 'Open file', '/*.txt')
         if fname[0]:
-            self.UseLog.Log_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
+            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, fname[0])
             f = open(fname[0], 'w', encoding = 'utf-8')
             with f:
                 f.write(self.UseWidget.ToolOutputtextEdit.toPlainText())
