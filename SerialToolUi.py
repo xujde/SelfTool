@@ -303,7 +303,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                         x_change_min = x_min - self.LineFigure.Updata_Count
                         x_change_max = x_max - self.LineFigure.Updata_Count + 1  #此处需要＋1，否则调整的X轴范围会越来越小
                     if (x_max - x_min) != (x_change_max - x_change_min):
-                        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "!= x_min:", x_min, "x_max:", x_max, "x_change_min:", x_change_min, "x_min:", x_change_max)
+                        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "UpdateData_UseSignal != x_min:", x_min, "x_max:", x_max, "x_change_min:", x_change_min, "x_change_max:", x_change_max)
                     self.LineFigure.Update_X_Data = np.arange(int(x_change_min), int(x_change_max))
                     self.LineFigure.Change_Axis_Xlim(self.LineFigure.Update_X_Data) #只更新X轴坐标范围
                     self.LineFigure.Line.set_xdata(self.LineFigure.Update_X_Data)
@@ -337,15 +337,30 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                                 self.LineFigure.Update_Y_Data[v] = self.LineFigure.Cache_Y_Data[v]
                                 OutListRangeFlag = 9
                             m = len(Update_Y_Data)
+                    else:
+                        for n in range(len(self.LineFigure.Cache_Y_Data)): #前面的值从self.LineFigure.Cache_Y_Data往前找历史值
+                            if Update_Y_Data[0] == self.LineFigure.Cache_Y_Data[n]:
+                                for w in range(len(Update_Y_Data)):
+                                    if Update_Y_Data[w] != self.LineFigure.Cache_Y_Data[n + w]:
+                                        break #不连续相同，继续查找
+                            if w == (len(Update_Y_Data) - 1):
+                                break #已经找到连续相同，退出查找
+                        if w != (len(Update_Y_Data) - 1):   #累计更新数据数量超过Cache_Y_Data长度，取Cache_Y_Data最早的值
+                            for v in range(len(self.LineFigure.Update_Y_Data)):
+                                self.LineFigure.Update_Y_Data[v] = self.LineFigure.Cache_Y_Data[v]
+                                OutListRangeFlag = 11
+                            m = len(Update_Y_Data)
 
-                    for m in range(len(Update_Y_Data)):
-                        if m < len(self.LineFigure.Update_Y_Data):#需要self.LineFigure.Update_X_Data和self.LineFigure.Update_Y_Data的长度小于Update_Y_Data的情况
+                    while(m < len(Update_Y_Data)): #for m in range(len(Update_Y_Data)): 使用此for语句，m是从0开始计数
+                        if m < len(self.LineFigure.Update_Y_Data):  #需要self.LineFigure.Update_X_Data和self.LineFigure.Update_Y_Data的长度小于Update_Y_Data的情况
                             self.LineFigure.Update_Y_Data[diff + m] = Update_Y_Data[m]
                             OutListRangeFlag = 10
+                        m = m + 1
 
-                    if x_change_max == x_max:   #判断X坐标轴的变化，确定标记线移动方向和长度
+
+                    if (x_change_max - 1) == x_max:   #判断X坐标轴的变化，确定标记线移动方向和长度
                         if x_change_min != x_min:
-                            Update_Mark_Line_XMove = x_change_min - x_min - 1 #此处不-1标记线移动的长度会比更新的数据长度小1
+                            Update_Mark_Line_XMove = x_change_min - x_min
                         else:
                             Update_Mark_Line_XMove = self.LineFigure.Updata_Count*-1
                     else:
