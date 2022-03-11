@@ -476,8 +476,9 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
             event.accept()
         else:
             event.ignore()
-    #动态调整窗口大小
+
     def resizeEvent(self, event):
+        # 动态调整窗口大小
         Change_wide = event.size().width()
         Change_high = event.size().height()
         self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "Change_wide:", Change_wide, ",Change_high:", Change_high)
@@ -659,9 +660,9 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
 
             return Result_List[PaintWithAxis_UpdateData_Index]
         except Exception as e:
+            self.UseLog.ErrorLog_Output("Update_Data_Analyse Error:", e)
             Error_List = []
             return Error_List
-            self.UseLog.ErrorLog_Output("Update_Data_Analyse Error:", e)
 
     def Update_ScrollBar_Status(self, After_x_min, Aftere_x_max, After_y_min, Aftere_y_max):
         Ver_Max = 0; Ver_Min = 0; VerBarValue = -1; VerBarLength = -1
@@ -937,17 +938,26 @@ class Serial_Tool_Widget(QWidget):
                 self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' Successful')
 
         if sender.text() == "发送数据":
-            if (self.Serial.Open_Ret == True):
-                if(self.Format):
-                    self.Serial.SerialWritePort(self.Sendtext_Edit.text())
-                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "Dex 写入字节数：", self.Serial.Send_Count)
-                    self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + self.Sendtext_Edit.text())
+            if 'Serial' in dir(self):
+                if (self.Serial.Open_Ret == True):
+                    if(self.Format):
+                        self.Serial.SerialWritePort(self.Sendtext_Edit.text())
+                        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "Dex 写入字节数：", self.Serial.Send_Count)
+                        self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + self.Sendtext_Edit.text())
+                    else:
+                        Sendtext = self.StrHex2Dec(self.Sendtext_Edit.text())   #不进行转换 发送转成字节流时又转换成了ascii发送（例：02432D0D0A->30323433324430443041）
+                        Sendtext = Sendtext.replace(" ", "")  # 删除空格
+                        try:
+                            self.Serial.SerialWritePort(Sendtext)
+                        except Exception as e:
+                            self.UseLog.ErrorLog_Output("hex data between must Combined with the blank space!!", e)
+                            return
+                        self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "Hex 写入字节数：", self.Serial.Send_Count)
+                        self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + Sendtext)
                 else:
-                    self.Serial.SerialWritePort(self.Sendtext_Edit.text().encode('utf-8').hex())
-                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "Hex 写入字节数：", self.Serial.Send_Count)
-                    self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + self.Sendtext_Edit.text().encode('utf-8').hex())
+                    self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' ERROR')
             else:
-                self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' ERROR')
+                self.UseLog.ErrorLog_Output("PushButtonClickedHandle Send data not open serial!!")
 
         if sender.text() == "清空发送框":
             self.Sendtext_Edit.clear()
@@ -974,16 +984,46 @@ class Serial_Tool_Widget(QWidget):
 
     def RadioButtonClickedHandle(self):
         sender = self.sender()
-        if sender.text() == "Dex":
+        if sender.text() == "Dex" and self.Format == False:
+            try:
+                Hex2DexResult = self.StrHex2Dec(self.Sendtext_Edit.text())
+            except Exception as e:
+                self.UseLog.ErrorLog_Output("RadioButtonClickedHandle Hex2Dec Errror:", e)
+                return
+            self.Sendtext_Edit.setText(Hex2DexResult)
             self.Format = True
-            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "Dex")
 
-        if sender.text() == "Hex":
+        if sender.text() == "Hex" and self.Format == True:
+            try:
+                Dec2HexResult = self.StrDec2Hex(self.Sendtext_Edit.text())
+            except Exception as e:
+                self.UseLog.ErrorLog_Output("RadioButtonClickedHandle Dec2Hex Errror:", e)
+                return
+            self.Sendtext_Edit.setText(Dec2HexResult)
             self.Format = False
-            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level6, "Hex")
 
-    # 选定串口
+    def StrDec2Hex(self, Source):
+        lin = ['%02X' % ord(i) for i in Source]
+        return " ".join(lin)
+
+    def StrHex2Dec(self, Source):
+        nResult = ""
+        nLen = len(Source)
+        Start_Index = 0;End_Index = 0
+        for i in range(nLen):
+            if Source[i] == " " or (Source[i] == '0' and i != 0 and Start_Index != End_Index and Source[i - 1] != 'x' and Source[i - 1] != 'X'):
+                nResult += chr(int(Source[Start_Index:End_Index], 16))
+                Start_Index = i
+                continue
+            elif i == (nLen - 1):
+                End_Index = i + 1
+                nResult += chr(int(Source[Start_Index:End_Index], 16))
+                continue
+            End_Index = i + 1
+        return nResult
+
     def GetOpenPort(self, port_str):
+        # 选定串口
         if len(port_str):
             Front_index = port_str.find('(')
             Rear_index = port_str.find(')')
@@ -1090,12 +1130,12 @@ class Serial_Tool_MainUI(QMainWindow):
         #日志输出类型UI选项
         self.LogTypeList = []
 
-        Log_type = QAction("日志输出类型1", self, checkable=True)
+        Log_type = QAction("日志输出到控制台", self, checkable=True)
         Log_type.setStatusTip('Use Print Output')
         Log_type.setChecked(True)
         Log_type.triggered.connect(self.Tool_LogOption)
         self.LogTypeList.append(Log_type)
-        Log_type = QAction("日志输出类型2", self, checkable=True)
+        Log_type = QAction("日志输出到文件", self, checkable=True)
         Log_type.setStatusTip('Use File Output')
         Log_type.setChecked(False)
         Log_type.triggered.connect(self.Tool_LogOption)
