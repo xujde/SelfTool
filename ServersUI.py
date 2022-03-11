@@ -62,6 +62,7 @@ class Servers_Widget(QWidget, QThread):
         self.UseSoc = Soc
         self.UseGlobalVal = GlobalVal
         self.UseQueue = Queue
+        self.Format = True  # True:十进制  False:十六进制
         self.Servers_Widget_Init()
 
         try:
@@ -179,12 +180,23 @@ class Servers_Widget(QWidget, QThread):
 
     def ServersRadioButtonClickedHandle(self):
         sender = self.sender()
+        if sender.text() == "Dex" and self.Format == False:
+            try:
+                Hex2DexResult = self.StrHex2Dec(self.ServersLineEdit.text())
+            except Exception as e:
+                self.UseLog.ErrorLog_Output("RadioButtonClickedHandle Hex2Dec Errror:", e)
+                return
+            self.ServersLineEdit.setText(Hex2DexResult)
+            self.Format = True
 
-        if sender.text() == "Hex":
-            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Hex")
-
-        if sender.text() == "Dex":
-            self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Dex")
+        if sender.text() == "Hex" and self.Format == True:
+            try:
+                Dec2HexResult = self.StrDec2Hex(self.ServersLineEdit.text())
+            except Exception as e:
+                self.UseLog.ErrorLog_Output("RadioButtonClickedHandle Dec2Hex Errror:", e)
+                return
+            self.ServersLineEdit.setText(Dec2HexResult)
+            self.Format = False
 
     def ServersUpdateUiData(self, data):
         self.Servers_Link_Num.setText(str(data))
@@ -208,6 +220,29 @@ class Servers_Widget(QWidget, QThread):
                 self.ServerstextEdit.append(RecvData)
             except Exception as e:
                 self.UseLog.ErrorLog_Output("ServersShowRecvData  ServerstextEdit Error:", e)
+
+    def StrDec2Hex(self, Source):
+        lin = ['%02X' % ord(i) for i in Source]
+        return " ".join(lin)
+
+    def StrHex2Dec(self, Source):
+        nResult = ""
+        nLen = len(Source)
+        Start_Index = 0;
+        End_Index = 0
+        for i in range(nLen):
+            if Source[i] == " " or (
+                    Source[i] == '0' and i != 0 and Start_Index != End_Index and Source[i - 1] != 'x' and Source[
+                i - 1] != 'X'):
+                nResult += chr(int(Source[Start_Index:End_Index], 16))
+                Start_Index = i
+                continue
+            elif i == (nLen - 1):
+                End_Index = i + 1
+                nResult += chr(int(Source[Start_Index:End_Index], 16))
+                continue
+            End_Index = i + 1
+        return nResult
 
 
 class Servers_MainUI(QMainWindow):
