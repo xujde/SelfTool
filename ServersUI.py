@@ -255,12 +255,12 @@ class Servers_MainUI(QMainWindow):
         #日志输出类型UI选项
         self.LogTypeList = []
 
-        Log_type = QAction("日志输出类型1", self, checkable=True)
+        Log_type = QAction("日志输出到控制台", self, checkable=True)
         Log_type.setStatusTip('Use Print Output')
         Log_type.setChecked(True)
         Log_type.triggered.connect(self.Servers_LogOption)
         self.LogTypeList.append(Log_type)
-        Log_type = QAction("日志输出类型2", self, checkable=True)
+        Log_type = QAction("日志输出到文件", self, checkable=True)
         Log_type.setStatusTip('Use File Output')
         Log_type.setChecked(False)
         Log_type.triggered.connect(self.Servers_LogOption)
