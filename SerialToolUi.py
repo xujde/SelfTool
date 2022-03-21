@@ -9,6 +9,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backend_bases import MouseButton
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+from matplotlib.widgets import Cursor
 import serial.tools.list_ports
 import numpy as np
 
@@ -70,6 +71,7 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         self.Update_X_Data = np.arange((self.CacheDataNum - self.ShowDataNum), self.CacheDataNum)
         self.Update_Y_Data = [0] * self.ShowDataNum
         self.Cache_Y_Data = [0] * self.CacheDataNum
+        self.UseCursor = Cursor(self.Axis, useblit=True, color='red', linewidth=2)
 
     def Add_Line(self, x_data, y_data, y2_data=None):
         self.Line = Line2D(x_data, y_data)  # 绘制2D折线图
@@ -169,6 +171,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
 
         self.LineFigure.UseFigure.canvas.mpl_connect('button_press_event', self.Mouse_PressEvent)  # 鼠标点击事件处理
         self.LineFigure.UseFigure.canvas.mpl_connect('scroll_event', self.Mouse_ScrollEvent)  # 鼠标滚轮事件处理
+        self.LineFigure.UseCursor.canvas.mpl_connect('motion_notify_event', self.Mouse_MoveEvent)   #鼠标移动事件处理
 
         self.LineFigureLayout.addWidget(self.LineFigure, 0, 0, 1, 5)
 
@@ -199,6 +202,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.Y2LineEdit = QLabel('Y2')
         self.XDiffLineEdit = QLabel('X-Diff')
         self.YDiffLineEdit = QLabel('Y-Diff')
+        self.MouseMoveMarkLabel = QLabel('X:None - Y:None')
 
         self.X1_LineEdit = QLineEdit()
         self.Y1_LineEdit = QLineEdit()
@@ -234,7 +238,8 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
     def Ui_Layout(self):
         self.LineFigureLayout.addWidget(self.StartButton, 1, 0)
         self.LineFigureLayout.addWidget(self.StopButton, 1, 1)
-        self.LineFigureLayout.addWidget(self.SaveButton, 1, 2)
+        self.LineFigureLayout.addWidget(self.MouseMoveMarkLabel, 1, 2)
+        self.LineFigureLayout.addWidget(self.SaveButton, 1, 3)
 
         self.LineFigureLayout.addWidget(self.HorizontalScrollBar, 1, 4)
         self.LineFigureLayout.addWidget(self.VerticalScrollBar, 0, 6)  # 坐标轴从(0,0)开始，长度为5
@@ -623,6 +628,9 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "x_min:", x_min, "x_max:", x_max, "x_mid:", x_mid, "x_change_range:", x_change_range, "x_change_min:", x_change_min, "x_change_max:", x_change_max, "After_x_min:", After_x_min, "Aftere_x_max:", Aftere_x_max)
         self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "y_min:", y_min, "y_max:", y_max, "y_mid:", y_mid, "y_change_range:", y_change_range, "y_change_min:", y_change_min, "y_change_max:", y_change_max, "After_y_min:", After_y_min, "Aftere_y_max:", Aftere_y_max)
 
+    def Mouse_MoveEvent(self, event):
+        self.MouseMoveMarkLabel.setText('X:' + str(event.xdata) + ' - Y:' + str(event.ydata))
+
     def XYButton(self):
         sender = self.sender()
         if sender.text() == "XY1":
@@ -637,14 +645,17 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         #解析接收到的字符串数据，先按指定分隔符切片，再将切片之后的数据转换成整型
         try:
             Source_List = Source_Data.split('\r\n') #分出行数据
-            for i in range(len(Source_List) - 1):
+            # print("Source_List", Source_List, len(Source_List))
+            for i in range(len(Source_List)):
                 Source_List[i] = Source_List[i].split(PaintWithAxis_UpdateData_separator)
+                # print("Source_List[i]", Source_List[i], len(Source_List[i]))
 
-            Result_List = [0 for i in range(len(Source_List) - 1)]
-            for i in range(len(Source_List) - 1):
+            Result_List = [0 for i in range(len(Source_List))]
+            # print("Result_List", len(Result_List))
+            for i in range(len(Source_List)):
                 Result_List[i] = [0 for j in range(len(Source_List[i]))]
 
-            for i in range(len(Source_List) - 1):
+            for i in range(len(Source_List)):
                 for j in range(len(Source_List[i])):
                     try:
                         if Source_List[i][j] != '':
@@ -654,8 +665,9 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                         Error_List = []
                         return Error_List
                     self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, "Source_List[", i, "][", j, "]:", Source_List[i][j], type(Source_List[i][j]), Result_List[i][j])
+                    # print("Result_List[i]", Result_List[i], i, j, PaintWithAxis_UpdateData_Index)
 
-            if len(Source_List) < PaintWithAxis_UpdateData_Index or len(Result_List) < PaintWithAxis_UpdateData_Index:   #源数据不完整无法解析出想要的数据
+            if (len(Source_List) - 1) < PaintWithAxis_UpdateData_Index or (len(Result_List) - 1) < PaintWithAxis_UpdateData_Index:   #源数据不完整无法解析出想要的数据
                 Error_List = []
                 return Error_List
 
@@ -981,19 +993,21 @@ class Serial_Tool_Widget(QWidget):
 
     def RadioButtonClickedHandle(self):
         sender = self.sender()
-        if sender.text() == "Dex" and self.Format == False:
+        if sender.text() == "Dex" and self.Format == False and sender.isChecked():
             try:
                 Hex2DexResult = self.StrHex2Dec(self.Sendtext_Edit.text())
             except Exception as e:
+                self.HexButton.setChecked(True)
                 self.UseLog.ErrorLog_Output("RadioButtonClickedHandle Hex2Dec Errror:", e)
                 return
             self.Sendtext_Edit.setText(Hex2DexResult)
             self.Format = True
 
-        if sender.text() == "Hex" and self.Format == True:
+        if sender.text() == "Hex" and self.Format == True and sender.isChecked():
             try:
                 Dec2HexResult = self.StrDec2Hex(self.Sendtext_Edit.text())
             except Exception as e:
+                self.DexButton.setChecked(True)
                 self.UseLog.ErrorLog_Output("RadioButtonClickedHandle Dec2Hex Errror:", e)
                 return
             self.Sendtext_Edit.setText(Dec2HexResult)
