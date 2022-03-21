@@ -3,10 +3,16 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from serial import Serial
 import serial.tools.list_ports
 import binascii
+from enum import Enum
 
 import System
 from System import LogModule
 from System import LogLevel
+
+class SerialWriteType(Enum):
+    # 可根据不同工程包含的模块进行增加
+    Dex = 1
+    Hex = 2
 
 class Serial_Tool_SerThread(QThread, threading.Thread):
     Signal = pyqtSignal(str)
@@ -33,6 +39,7 @@ class Serial_Tool_Ser(Serial):
         self.UseLog = Log
         self.UseGlobalVal = GlobalVal
         self.UseSer = serial.Serial(portx, buand, timeout=timeout)
+        self.Send_Count = 0
         if self.UseSer.isOpen:
             self.UseLog.NormalLog_Output(LogModule.SerModule, LogLevel.Level3, bytesize, stopbits, parity)
             self.UseSer.BYTESIZES = bytesize
@@ -53,16 +60,17 @@ class Serial_Tool_Ser(Serial):
         try:
             if self.UseSer.isOpen:
                 self.Strglo = time.strftime("[%Y-%m-%d %H:%M:%S (R)]", time.localtime())
-                # Signal.emit(self.Strglo)
                 if self.UseSer.in_waiting:
                     # print("in_waiting", self.UseSer.in_waiting)
                     ReadSource = self.UseSer.read(self.UseSer.in_waiting)
                     try :
-                        ReadString =  ReadSource.decode('utf-8', "ignore")#self.UseSer.read(self.UseSer.in_waiting).decode(encoding = 'utf-8')
-                    except Exception as e:
-                        self.UseLog.ErrorLog_Output("SerialReadData Decode Error:", e)
-                        ReadString = binascii.b2a_hex(ReadSource).decode('utf-8', "ignore")
-                        # print(ReadSource, "b2a_hex", ReadString)
+                        ReadString =  ReadSource.decode('GBK')
+                        self.UseLog.NormalLog_Output(LogModule.SerModule, LogLevel.Level6, ReadSource, "--decode-->", ReadString)
+                    except :
+                        ReadString = binascii.b2a_hex(ReadSource)
+                        ReadString = str(ReadString)
+                        self.UseLog.NormalLog_Output(LogModule.SerModule, LogLevel.Level6, ReadSource, "--b2a_hex-->", ReadString)
+
                     self.Strglo += ReadString
                     # print("Strglo :", self.Strglo, type(self.Strglo))
                     Signal.emit(self.Strglo)
@@ -92,10 +100,12 @@ class Serial_Tool_Ser(Serial):
             self.UseLog.NormalLog_Output(LogModule.SerModule, LogLevel.Level6, "SerialColsePort Serial not open!!!")
 
     # 写数据
-    def SerialWritePort(self, text):
-        self.Send_Count = 0
+    def SerialWritePort(self, text, DexOrHex):
         if self.UseSer.isOpen and System.Serial_Tool_GlobalManager.Global_Get(self.UseGlobalVal, 'Serial_Open_Flag'):
-            self.Send_Count = self.UseSer.write(text.encode("gbk"))  # 写数据
+            if DexOrHex == SerialWriteType.Hex:
+                self.Send_Count = self.UseSer.write(text)  # 写数据
+            else:
+                self.Send_Count = self.UseSer.write(text.encode("gbk"))  # 写数据
         else:
             self.UseLog.NormalLog_Output(LogModule.SerModule, LogLevel.Level6, "SerialWritePort Serial not open!!!")
 

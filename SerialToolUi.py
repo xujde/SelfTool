@@ -17,6 +17,7 @@ import SerialToolSer
 from System import LogModule
 from System import LogLevel
 from System import LogType
+from SerialToolSer import SerialWriteType
 
 matplotlib.rcParams['font.sans-serif'] = ['SimHei']  # 解决坐标轴中文显示问题
 matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号不显示的问题
@@ -934,6 +935,7 @@ class Serial_Tool_Widget(QWidget):
         if sender.text() == "关闭串口":
             self.OpenButton.setEnabled(True)
             if (self.Serial.Open_Ret == True):
+                System.Serial_Tool_GlobalManager.Global_Set(self.UseGlobalVal, 'Serial_Open_Flag', True)
                 self.Serial.SerialColsePort()
                 self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' Successful')
 
@@ -941,19 +943,14 @@ class Serial_Tool_Widget(QWidget):
             if 'Serial' in dir(self):
                 if (self.Serial.Open_Ret == True):
                     if(self.Format):
-                        self.Serial.SerialWritePort(self.Sendtext_Edit.text())
+                        self.Serial.SerialWritePort(self.Sendtext_Edit.text(), SerialWriteType.Dex)
                         self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "Dex 写入字节数：", self.Serial.Send_Count)
                         self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + self.Sendtext_Edit.text())
                     else:
-                        Sendtext = self.StrHex2Dec(self.Sendtext_Edit.text())   #不进行转换 发送转成字节流时又转换成了ascii发送（例：02432D0D0A->30323433324430443041）
-                        Sendtext = Sendtext.replace(" ", "")  # 删除空格
-                        try:
-                            self.Serial.SerialWritePort(Sendtext)
-                        except Exception as e:
-                            self.UseLog.ErrorLog_Output("hex data between must Combined with the blank space!!", e)
-                            return
+                        Sendtext = self.BuildSendData(self.Sendtext_Edit.text())  # 不进行转换 发送转成字节流时又转换成了ascii发送（例：02432D0D0A->30323433324430443041）
+                        self.Serial.SerialWritePort(Sendtext, SerialWriteType.Hex)
                         self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "Hex 写入字节数：", self.Serial.Send_Count)
-                        self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + Sendtext)
+                        self.Recvtext_Edit.append(time.strftime("[%Y-%m-%d %H:%M:%S (T)] ", time.localtime()) + str(Sendtext))
                 else:
                     self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level3, sender.text() + ' ERROR')
             else:
@@ -1002,6 +999,11 @@ class Serial_Tool_Widget(QWidget):
             self.Sendtext_Edit.setText(Dec2HexResult)
             self.Format = False
 
+    def BuildSendData(self, Source):
+        nResult = Source.replace(" ", "")  # 删除空格
+        nResult = bytes.fromhex(nResult)
+        return nResult
+
     def StrDec2Hex(self, Source):
         lin = ['%02X' % ord(i) for i in Source]
         return " ".join(lin)
@@ -1009,17 +1011,23 @@ class Serial_Tool_Widget(QWidget):
     def StrHex2Dec(self, Source):
         nResult = ""
         nLen = len(Source)
-        Start_Index = 0;End_Index = 0
+        Start_Index = 0
         for i in range(nLen):
-            if Source[i] == " " or (Source[i] == '0' and i != 0 and Start_Index != End_Index and Source[i - 1] != 'x' and Source[i - 1] != 'X'):
-                nResult += chr(int(Source[Start_Index:End_Index], 16))
+            if i == 0and (i+1 < nLen) and Source[i] != 0 and (Source[i + 1] != 'x' and Source[i + 1] != 'X'):
                 Start_Index = i
+                nResult += chr(int(Source[Start_Index:Start_Index + 2], 16))
+                i = Start_Index + 2
                 continue
-            elif i == (nLen - 1):
-                End_Index = i + 1
-                nResult += chr(int(Source[Start_Index:End_Index], 16))
+            elif Source[i] == " " and (i+2 < nLen)  and (Source[i + 2] != 'x' and Source[i + 2] != 'X'):
+                Start_Index = i + 1
+                nResult += chr(int(Source[Start_Index:Start_Index + 2], 16))
+                i = Start_Index + 2
                 continue
-            End_Index = i + 1
+            elif Source[i] == '0' and (i+1 < nLen)  and (Source[i + 1] == 'x' or Source[i + 1] == 'X'):
+                Start_Index = i + 2
+                nResult += chr(int(Source[Start_Index:Start_Index + 2], 16))
+                i = Start_Index + 2
+                continue
         return nResult
 
     def GetOpenPort(self, port_str):
