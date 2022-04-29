@@ -28,20 +28,6 @@ class LogType(Enum):
     PrintType = 1 #print打印到stdout
     LogfileType = 2 #print输出到文件
 
-#print输出重定向到变量中
-class Serial_Tool_ErrorLogFile():
-    def __init__(self):
-        self.ErrorLogMsg = ""
-    #需要有write方法
-    def write(self, Msg):
-        self.ErrorLogMsg += Msg
-
-    def Get(self):
-        return self.ErrorLogMsg
-
-    def Clear(self):
-        self.ErrorLogMsg = ""
-
 #调试日志功能
 class Serial_Tool_Log(QWidget):
     def __init__(self, parent=None):
@@ -49,7 +35,7 @@ class Serial_Tool_Log(QWidget):
         self.LogType = LogType.PrintType
         self.LogModule = 0
         self.LogLevel = 0
-        self.ErrorLogFile = Serial_Tool_ErrorLogFile()
+        self.Create_ErrorLogFile()
 
         if self.LogType == LogType.LogfileType:#输出日志到文件先创建日志文件
             self.Create_LogFile()
@@ -66,9 +52,7 @@ class Serial_Tool_Log(QWidget):
 
     #异常日志采用弹窗显示
     def ErrorLog_Output(self, *cObjects, cSep=' ', cEnd='\n', cFile=sys.stdout, cFlush=False):
-        self.ErrorLogFile.Clear()
         print(*cObjects, sep=cSep, end=cEnd, file=self.ErrorLogFile, flush=cFlush)
-        reply = QMessageBox.critical(self, "Error", self.ErrorLogFile.Get(), QMessageBox.Yes)
 
     def Change_Type(self, cType):
         if  self.LogType == cType:
@@ -96,8 +80,14 @@ class Serial_Tool_Log(QWidget):
         self.LogFile.write('\n')
 
     def Log_Close(self):
+        self.ErrorLogFile.close()
         if self.LogType == LogType.LogfileType:
             self.LogFile.close()
+
+    def Create_ErrorLogFile(self):
+        self.ErrorLogFile = open('./SerialToolErrorLog.txt', 'a', encoding='utf-8')
+        self.ErrorLogFile.write(str(datetime.datetime.now()))
+        self.ErrorLogFile.write('\n')
 
 ## 使用字典管理自定义多文件共享全局变量
 class Serial_Tool_GlobalManager():

@@ -71,7 +71,7 @@ class Serial_Tool_PaintWithAxis(FigureCanvas):
         self.Update_X_Data = np.arange((self.CacheDataNum - self.ShowDataNum), self.CacheDataNum)
         self.Update_Y_Data = [0] * self.ShowDataNum
         self.Cache_Y_Data = [0] * self.CacheDataNum
-        self.UseCursor = Cursor(self.Axis, useblit=True, color='red', linewidth=2)
+        self.UseCursor = Cursor(self.Axis, useblit=True, color='Yellow', linewidth=2)
 
     def Add_Line(self, x_data, y_data, y2_data=None):
         self.Line = Line2D(x_data, y_data)  # 绘制2D折线图
@@ -374,6 +374,8 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
 
                     self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "n:", n, "m:", m, "v:", v, "w:", w, "p:", p, "diff", diff)
                     self.LineFigure.Line.set_ydata(self.LineFigure.Update_Y_Data)
+
+
                     self.HorizontalScrollBar.setValue(int(x_change_max) / PaintWithAxis_SlideShowData_Step) #设置滚动条的值
                     self.HorizontalScrollBarValue = self.HorizontalScrollBar.value()
                     self.UseLog.NormalLog_Output(LogModule.UiModule, LogLevel.Level5, "UpdateData_UseSignal x_min:", x_min, " x_max:", x_max)
@@ -383,6 +385,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
                 self.LineFigure.draw()  # 重新画图
         except Exception as e:
             self.UseLog.ErrorLog_Output("UpdateData_UseSignal Error:", e, "flag:", OutListRangeFlag)
+            pass
         PaintWithAxis_Setlim_Flag = False
 
     def PushButtonClickedHandle(self):
@@ -726,7 +729,7 @@ class Serial_Tool_PaintWithAxisUi(QMainWindow):
         self.VerticalScrollBarValue = self.VerticalScrollBar.value()
 
     def Update_Mark_Line(self, X_Move):
-        for i in range(self.Sign_Select):
+        for i in range(len(self.LineFigure.VLine)):
             X_Old = np.mean(self.LineFigure.VLine[i]. get_xdata())#标记为直线,取平均值
             X_Vline = X_Old + X_Move
             if X_Vline < 0:
